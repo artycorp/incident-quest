@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Тайна счастливой мелодии</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main id="app"></main>
+  <script type="application/json" id="episode">
+{
+  "title": {
+    "ru": "Тайна счастливой мелодии",
+    "en": "The Mystery of the Happy Tune"
+  },
+  "source": {
+    "title": "Stack Exchange: Outage Postmortem - July 20, 2016",
+    "url": "https://web.archive.org/web/20160720200842/https://stackstatus.net/post/147710624694/outage-postmortem-july-20-2016"
+  },
+  "intro": {
+    "ru": "20 июля 2016 года, Stack Overflow. Запросы пользователей принимает балансировщик и раздаёт их web-серверам. Web-серверы собирают главную страницу со списком постов и все остальные страницы ([схема сервиса](002.arch.ru.html)).\n\n14:44 UTC. Сайт перестаёт открываться целиком ([график доступности](chart:down@14:44)). Ты дежурный.",
+    "en": "July 20, 2016, Stack Overflow. User requests land on a load balancer, which hands them to the web servers. The web servers render the home page with its list of posts, and every other page too ([service diagram](002.arch.en.html)).\n\n14:44 UTC. The whole site stops loading ([availability chart](chart:down@14:44)). You are on call."
+  },
+  "steps": [
+    {
+      "text": {
+        "ru": "14:44 UTC. Stack Overflow недоступен целиком: не открывается ни одна страница. Ты дежурный. С чего начнёшь?",
+        "en": "14:44 UTC. Stack Overflow is down as a whole: not a single page loads. You are on call. Where do you start?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Смотрю, что балансировщик думает о web-серверах",
+            "en": "Check what the load balancer thinks of the web servers"
+          },
+          "correct": true,
+          "chart": "rotation@14:44",
+          "result": {
+            "ru": "Балансировщик вывел из ротации все web-серверы: они не проходят health check. А health check у балансировщика — это запрос главной страницы. Значит, главная перестала отвечать вовремя. Надо понять, почему.",
+            "en": "The load balancer has taken every web server out of rotation: they fail the health check. And the balancer’s health check is a request for the home page. So the home page has stopped responding fast enough. Time to find out why."
+          }
+        },
+        {
+          "text": {
+            "ru": "Откатываю последний деплой",
+            "en": "Roll back the latest deploy"
+          },
+          "correct": false,
+          "chart": "rollback",
+          "degraded": true,
+          "result": {
+            "ru": "Верно, откат ничего не дал: сайт так и лежит. Код тут ни при чём, и откат просто съел время. Вернись к развилке.",
+            "en": "Right, the rollback changed nothing: the site is still down. The code is not to blame, and the rollback only cost time. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: после отката доступность так и осталась на нуле. Вернись к развилке.",
+            "en": "Look again: after the rollback availability is still at zero. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Проверяю базу данных: вдруг она тормозит",
+            "en": "Check the database: maybe it is slow"
+          },
+          "correct": false,
+          "chart": "db",
+          "degraded": false,
+          "result": {
+            "ru": "Верно, база в порядке: запросы быстрые, как обычно. Причина не здесь. Вернись к развилке.",
+            "en": "Right, the database is fine: queries are as fast as usual. The cause is elsewhere. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: время запросов ровное и низкое, база здорова. Вернись к развилке.",
+            "en": "Look again: query time is flat and low, the database is healthy. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Проверяю сеть между балансировщиком и web-серверами",
+            "en": "Check the network between the load balancer and the web servers"
+          },
+          "correct": false,
+          "chart": "network",
+          "degraded": false,
+          "result": {
+            "ru": "Верно, сеть чистая: потерь пакетов нет. Серверы доступны, но балансировщик всё равно их не пускает. Вернись к развилке.",
+            "en": "Right, the network is clean: no packet loss. The servers are reachable, yet the balancer still keeps them out. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: потери пакетов около нуля, сеть в порядке. Вернись к развилке.",
+            "en": "Look again: packet loss is near zero, the network is fine. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "Главная не укладывается в health check. Открываешь CPU web-серверов. Что видишь?",
+        "en": "The home page does not make it through the health check. You open CPU on the web servers. What do you see?"
+      },
+      "chart": "cpu@14:48",
+      "options": [
+        {
+          "text": {
+            "ru": "Деградация: CPU web-серверов упёрся в потолок",
+            "en": "Degradation: web server CPU is pinned at the ceiling"
+          },
+          "correct": true,
+          "chart": "latency@14:48",
+          "result": {
+            "ru": "Да. Серверы жгут CPU на чём-то тяжёлом, и главная не успевает ответить. Беда именно в главной: остальные страницы, по оценке команды, открывались бы, если бы не health check.",
+            "en": "Yes. The servers burn CPU on something heavy, and the home page cannot answer in time. The trouble is the home page itself: by the team’s estimate every other page would have been reachable if not for the health check."
+          }
+        },
+        {
+          "text": {
+            "ru": "Всё в порядке: CPU в норме, ищу в другом месте",
+            "en": "All fine: CPU is normal, I will look elsewhere"
+          },
+          "correct": false,
+          "chart": "latency@14:48",
+          "degraded": true,
+          "result": {
+            "ru": "Верно, беда есть: главная отвечает в десятки раз медленнее обычного, а CPU на потолке. Вернись к развилке.",
+            "en": "Right, there is trouble: the home page answers dozens of times slower than usual, and CPU is at the ceiling. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: главная отвечает в десятки раз медленнее обычного, а CPU на предыдущем графике на потолке. Вернись к развилке.",
+            "en": "Look again: the home page answers dozens of times slower than usual, and CPU on the previous chart is at the ceiling. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Деградация: на сайт пришёл всплеск трафика",
+            "en": "Degradation: a traffic spike hit the site"
+          },
+          "correct": false,
+          "chart": "traffic",
+          "degraded": false,
+          "result": {
+            "ru": "Верно, трафик обычный. CPU съедает не поток запросов, а что-то внутри них. Вернись к развилке.",
+            "en": "Right, traffic is normal. CPU is eaten not by the volume of requests but by something inside them. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: трафик ровный, всплеска нет. Вернись к развилке.",
+            "en": "Look again: traffic is flat, there is no spike. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "Каждый просмотр главной стоит web-серверам слишком много CPU. Что ищешь?",
+        "en": "Every home page view costs the web servers far too much CPU. What do you look for?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Смотрю, какие посты сейчас в списке на главной",
+            "en": "Look at which posts are in the home page list right now"
+          },
+          "correct": true,
+          "chart": "checks",
+          "result": {
+            "ru": "В списке главной оказался пост с битым форматированием: около 20 000 пробелов подряд в строке комментария `-- play happy sound for player to enjoy`. Главная прогоняет посты через регулярку, которая обрезает пробелы в начале и конце строки: `^[\\s\\u200c]+|[\\s\\u200c]+$`.\n\nЕсли 20 000 пробелов стоят не в конце строки, движок с backtracking пробует совпадение с каждого пробела заново: 20 000 + 19 999 + … + 1, около 199 990 000 проверок. И так на каждом просмотре главной. 14:54: причина найдена, на поиск ушло 10 минут.",
+            "en": "The home page list holds a malformed post: about 20,000 consecutive whitespace characters on a comment line starting with `-- play happy sound for player to enjoy`. The home page runs posts through a regex that trims whitespace from the start and end of a line: `^[\\s\\u200c]+|[\\s\\u200c]+$`.\n\nWhen 20,000 spaces are not at the end of the string, a backtracking engine retries the match from every single space: 20,000 + 19,999 + … + 1, about 199,990,000 checks. On every home page view. 14:54: cause found, it took 10 minutes."
+          }
+        },
+        {
+          "text": {
+            "ru": "Ищу DDoS: вдруг бот долбит главную",
+            "en": "Look for a DDoS: maybe a bot is hammering the home page"
+          },
+          "correct": false,
+          "chart": "traffic",
+          "degraded": false,
+          "result": {
+            "ru": "Верно, трафик обычный: никто не долбит. Дорогим стал каждый обычный запрос. Вернись к развилке.",
+            "en": "Right, traffic is normal: nobody is hammering. Every ordinary request has become expensive. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: трафик ровный, атаки нет. Вернись к развилке.",
+            "en": "Look again: traffic is flat, there is no attack. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Снимаю дамп памяти: вдруг утечка",
+            "en": "Take a memory dump: maybe a leak"
+          },
+          "correct": false,
+          "chart": "memory",
+          "degraded": false,
+          "result": {
+            "ru": "Верно, память ровная: утечки нет. Серверы упираются в CPU, а не в память. Вернись к развилке.",
+            "en": "Right, memory is flat: no leak. The servers are bound by CPU, not memory. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: память стоит на месте, утечки нет. Вернись к развилке.",
+            "en": "Look again: memory stays put, there is no leak. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Перезапускаю web-серверы",
+            "en": "Restart the web servers"
+          },
+          "correct": false,
+          "chart": "restart",
+          "degraded": true,
+          "result": {
+            "ru": "Верно, рестарт не помог: через минуту CPU снова на потолке. Причина пережила рестарт, и первый же просмотр главной снова её запускает. Вернись к развилке.",
+            "en": "Right, the restart did not help: a minute later CPU is back at the ceiling. The cause survived the restart, and the first home page view sets it off again. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: после рестарта CPU сразу вернулся на потолок. Вернись к развилке.",
+            "en": "Look again: right after the restart CPU went back to the ceiling. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "14:54. Причина известна: регулярка на посте из списка главной. Как вернуть сайт?",
+        "en": "14:54. The cause is known: the regex on a post from the home page list. How do you bring the site back?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Меняю регулярку на простую обрезку строки и выкатываю фикс",
+            "en": "Replace the regex with plain string trimming and ship the fix"
+          },
+          "correct": true,
+          "chart": "down@15:18",
+          "result": {
+            "ru": "Регулярку заменили функцией substring. Код написали за 14 минут, выкатка заняла ещё 10. В 15:18 Stack Overflow снова доступен: простой длился 34 минуты.",
+            "en": "The regex was replaced with a substring function. Writing the code took 14 minutes and rolling it out another 10. At 15:18 Stack Overflow is back: 34 minutes of downtime."
+          }
+        },
+        {
+          "text": {
+            "ru": "Отключаю health check на балансировщике",
+            "en": "Turn off the load balancer health check"
+          },
+          "correct": false,
+          "chart": "rotation@14:54",
+          "degraded": true,
+          "result": {
+            "ru": "Верно, серверы так и вне ротации: отключить health check в балансировщике нечем. Такой рубильник добавят только по итогам инцидента. Вернись к развилке.",
+            "en": "Right, the servers are still out of rotation: the balancer has no way to turn the health check off. That switch is added only after the incident. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: в ротации по-прежнему ноль серверов. Отключить health check нечем. Вернись к развилке.",
+            "en": "Look again: there are still zero servers in rotation. There is no switch to turn the health check off. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Добавляю web-серверов",
+            "en": "Add more web servers"
+          },
+          "correct": false,
+          "chart": "morecap",
+          "degraded": true,
+          "result": {
+            "ru": "Верно, новые серверы тоже падают: главная так же дорога на любом сервере, и они вылетают из ротации следом за старыми. Вернись к развилке.",
+            "en": "Right, the new servers fall too: the home page is just as expensive on any server, and they drop out of rotation right after the old ones. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: новые серверы продержались в ротации пару минут и вылетели. Вернись к развилке.",
+            "en": "Look again: the new servers lasted a couple of minutes in rotation and dropped out. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Жду: пост скоро сам уйдёт с главной",
+            "en": "Wait: the post will drop off the home page soon"
+          },
+          "correct": false,
+          "chart": "wait",
+          "degraded": true,
+          "result": {
+            "ru": "Верно, сайт так и лежит. Пока пост в списке главной, каждый просмотр жжёт CPU, а когда он уйдёт, неизвестно. Вернись к развилке.",
+            "en": "Right, the site stays down. While the post is in the home page list every view burns CPU, and nobody knows when it will drop off. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: доступность так и стоит на нуле. Вернись к развилке.",
+            "en": "Look again: availability is stuck at zero. Back to the fork."
+          }
+        }
+      ]
+    }
+  ],
+  "outro": {
+    "ru": "Всё из-за одного поста. В нём было около 20 000 пробелов подряд, и регулярка для обрезки пробелов `^[\\s\\u200c]+|[\\s\\u200c]+$` делала на нём около 199 990 000 проверок. Это не экспоненциальный catastrophic backtracking, а O(n²) от длины строки, но этого хватило ([график](chart:checks)). Пост стоял в списке главной, так что дорогая работа запускалась на каждом её просмотре. Главная перестала отвечать вовремя, а именно по ней балансировщик делал health check. Он вывел из ротации все web-серверы, и лёг весь сайт, хотя остальные страницы, по оценке команды, работали бы.\n\nРегулярку заменили функцией substring. Простой длился 34 минуты: 10 на поиск причины, 14 на фикс, 10 на выкатку ([весь инцидент](chart:down)). По итогам команда проверяет свои регулярки и валидацию постов, добавляет в балансировщик возможность отключить health check и пишет чек-лист на время аварии.\n\nДля нагрузочника: тест на «обычных» данных такое не ловит, потому что цена запроса зависит от содержимого, а не от RPS. Кладите в тестовые данные патологические входы: длинные строки, тысячи пробелов подряд, огромные посты, и смотрите CPU на запрос. И проверьте, что проверяет health check: если это тяжёлая страница, её деградация выключит весь сайт.",
+    "en": "It all came down to one post. It had about 20,000 consecutive spaces, and the whitespace-trimming regex `^[\\s\\u200c]+|[\\s\\u200c]+$` spent about 199,990,000 checks on it. That is not exponential catastrophic backtracking, just O(n²) in the string length, but it was enough ([chart](chart:checks)). The post sat in the home page list, so the expensive work ran on every home page view. The home page stopped responding fast enough, and the home page was exactly what the load balancer used as its health check. It pulled every web server out of rotation and took down the whole site, even though, by the team’s estimate, every other page would have worked.\n\nThe regex was replaced with a substring function. The outage lasted 34 minutes: 10 to find the cause, 14 to write the fix, 10 to roll it out ([the whole incident](chart:down)). As follow-ups the team audits its regexes and post validation, adds a way to disable the load balancer health check, and writes an outage checklist.\n\nFor load testers: a test on “normal” data will never catch this, because the cost of a request depends on its content, not on RPS. Put pathological inputs into your test data: long strings, thousands of consecutive spaces, huge posts, and watch CPU per request. And check what your health check actually checks: if it is a heavy page, its degradation switches off the whole site."
+  },
+  "charts": {
+    "down": {
+      "title": {
+        "ru": "Stack Overflow: доступность",
+        "en": "Stack Overflow: availability"
+      },
+      "unit": "%",
+      "x": [
+        "14:40",
+        "14:44",
+        "14:48",
+        "14:54",
+        "15:08",
+        "15:18",
+        "15:25"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "доступность",
+            "en": "availability"
+          },
+          "values": [
+            100,
+            0,
+            0,
+            0,
+            0,
+            100,
+            100
+          ]
+        }
+      ],
+      "note": {
+        "ru": "По времени из разбора Stack Exchange, UTC: простой с 14:44, причина найдена за 10 минут, фикс написан за 14, выкачен за 10. 100% — сайт открывается, 0% — недоступен целиком.",
+        "en": "From the times in the Stack Exchange postmortem, UTC: outage from 14:44, cause found in 10 minutes, fix written in 14, rolled out in 10. 100% means the site loads, 0% means it is down as a whole."
+      },
+      "marks": [
+        {
+          "x": "14:54",
+          "label": {
+            "ru": "причина найдена",
+            "en": "cause found"
+          }
+        },
+        {
+          "x": "15:08",
+          "label": {
+            "ru": "фикс написан",
+            "en": "fix written"
+          }
+        },
+        {
+          "x": "15:18",
+          "label": {
+            "ru": "фикс выкачен",
+            "en": "fix rolled out"
+          }
+        }
+      ],
+      "yMax": 100
+    },
+    "rotation": {
+      "title": {
+        "ru": "Балансировщик: web-серверы в ротации",
+        "en": "Load balancer: web servers in rotation"
+      },
+      "unit": "%",
+      "x": [
+        "14:40",
+        "14:44",
+        "14:48",
+        "14:54",
+        "15:08",
+        "15:18",
+        "15:25"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "в ротации",
+            "en": "in rotation"
+          },
+          "values": [
+            100,
+            0,
+            0,
+            0,
+            0,
+            100,
+            100
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация к фразе «the load balancer took the servers out of rotation». Числа серверов в разборе нет, значения в процентах. Времена из разбора, UTC.",
+        "en": "Illustrates “the load balancer took the servers out of rotation”. The postmortem gives no server count, so values are percentages. Times are from the postmortem, UTC."
+      },
+      "illustrative": true,
+      "yMax": 100
+    },
+    "cpu": {
+      "title": {
+        "ru": "web-серверы: CPU",
+        "en": "web servers: CPU"
+      },
+      "unit": "%",
+      "x": [
+        "14:40",
+        "14:44",
+        "14:48",
+        "14:54",
+        "15:08",
+        "15:18",
+        "15:25"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "CPU",
+            "en": "CPU"
+          },
+          "values": [
+            30,
+            100,
+            100,
+            100,
+            100,
+            30,
+            30
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация к фразе «caused one of our regular expressions to consume high CPU on our web servers». Точных значений в разборе нет.",
+        "en": "Illustrates “caused one of our regular expressions to consume high CPU on our web servers”. The postmortem gives no exact values."
+      },
+      "illustrative": true,
+      "yMax": 100
+    },
+    "latency": {
+      "title": {
+        "ru": "Время ответа",
+        "en": "Response time"
+      },
+      "unit": {
+        "ru": "с",
+        "en": "s"
+      },
+      "x": [
+        "14:40",
+        "14:44",
+        "14:48",
+        "14:54",
+        "15:08",
+        "15:18",
+        "15:25"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "главная",
+            "en": "home page"
+          },
+          "values": [
+            0.2,
+            10,
+            10,
+            10,
+            10,
+            0.2,
+            0.2
+          ]
+        },
+        {
+          "name": {
+            "ru": "страница вопроса",
+            "en": "question page"
+          },
+          "values": [
+            0.2,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.2,
+            0.2
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация к фразам «This caused the home page to stop responding fast enough» и «everything but the home page would have been accessible». Значения выдуманы.",
+        "en": "Illustrates “This caused the home page to stop responding fast enough” and “everything but the home page would have been accessible”. Values are made up."
+      },
+      "illustrative": true
+    },
+    "checks": {
+      "title": {
+        "ru": "Регулярка на строке из пробелов",
+        "en": "The regex on a run of spaces"
+      },
+      "unit": {
+        "ru": "млн проверок",
+        "en": "M checks"
+      },
+      "x": [
+        0,
+        5000,
+        10000,
+        15000,
+        20000
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "проверки символа",
+            "en": "character checks"
+          },
+          "values": [
+            0,
+            12.5,
+            50,
+            112.5,
+            199.99
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Посчитано по формуле из разбора: 20 000 + 19 999 + … + 1. Точка на 20 000 пробелах (199 990 000 проверок) — число из разбора, остальные — та же формула для более коротких строк.",
+        "en": "Computed with the formula from the postmortem: 20,000 + 19,999 + … + 1. The point at 20,000 spaces (199,990,000 checks) is the postmortem’s number; the rest is the same formula for shorter runs."
+      },
+      "illustrative": true,
+      "xLabel": {
+        "ru": "пробелов подряд",
+        "en": "consecutive spaces"
+      }
+    },
+    "rollback": {
+      "title": {
+        "ru": "Stack Overflow: доступность",
+        "en": "Stack Overflow: availability"
+      },
+      "unit": "%",
+      "x": [
+        "14:44",
+        "14:46",
+        "14:48",
+        "14:50",
+        "14:52"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "доступность",
+            "en": "availability"
+          },
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что было бы при этом действии. В разборе такого шага нет; код не менялся, поэтому после отката сайт лежит как лежал.",
+        "en": "Illustration: what this action would have led to. The postmortem has no such step; the code had not changed, so after a rollback the site stays down."
+      },
+      "illustrative": true,
+      "marks": [
+        {
+          "x": "14:46",
+          "label": {
+            "ru": "откат",
+            "en": "rollback"
+          }
+        }
+      ],
+      "yMax": 100
+    },
+    "db": {
+      "title": {
+        "ru": "База данных: время запроса",
+        "en": "Database: query time"
+      },
+      "unit": {
+        "ru": "мс",
+        "en": "ms"
+      },
+      "x": [
+        "14:30",
+        "14:35",
+        "14:40",
+        "14:44",
+        "14:48"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "p99",
+            "en": "p99"
+          },
+          "values": [
+            4,
+            5,
+            4,
+            4,
+            5
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что было бы при этом действии. В разборе такого шага нет; база в истории не участвует, её запросы быстрые.",
+        "en": "Illustration: what this action would have led to. The postmortem has no such step; the database plays no part in the story, its queries are fast."
+      },
+      "illustrative": true,
+      "yMax": 50
+    },
+    "network": {
+      "title": {
+        "ru": "Сеть балансировщик → web: потери пакетов",
+        "en": "Network balancer → web: packet loss"
+      },
+      "unit": "%",
+      "x": [
+        "14:30",
+        "14:35",
+        "14:40",
+        "14:44",
+        "14:48"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "потери",
+            "en": "loss"
+          },
+          "values": [
+            0,
+            0,
+            0.01,
+            0,
+            0
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что было бы при этом действии. В разборе такого шага нет; сеть исправна, серверы выводит из ротации health check.",
+        "en": "Illustration: what this action would have led to. The postmortem has no such step; the network is healthy, the health check is what pulls the servers."
+      },
+      "illustrative": true,
+      "yMax": 5
+    },
+    "traffic": {
+      "title": {
+        "ru": "Запросы к сайту",
+        "en": "Requests to the site"
+      },
+      "unit": {
+        "ru": "% от обычного",
+        "en": "% of usual"
+      },
+      "x": [
+        "14:30",
+        "14:35",
+        "14:40",
+        "14:44",
+        "14:48"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "запросы",
+            "en": "requests"
+          },
+          "values": [
+            100,
+            98,
+            101,
+            99,
+            100
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что было бы при этом действии. В разборе такого шага нет; в разборе нет всплеска трафика, причина в содержимом одного поста.",
+        "en": "Illustration: what this action would have led to. The postmortem has no such step; there is no traffic spike in the postmortem, the cause is the content of one post."
+      },
+      "illustrative": true,
+      "yMax": 150
+    },
+    "memory": {
+      "title": {
+        "ru": "web-серверы: память",
+        "en": "web servers: memory"
+      },
+      "unit": "%",
+      "x": [
+        "14:30",
+        "14:35",
+        "14:40",
+        "14:44",
+        "14:48"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "память",
+            "en": "memory"
+          },
+          "values": [
+            60,
+            61,
+            60,
+            61,
+            60
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что было бы при этом действии. В разборе такого шага нет; разбор называет причиной CPU, про память ничего нет.",
+        "en": "Illustration: what this action would have led to. The postmortem has no such step; the postmortem names CPU as the cause and says nothing about memory."
+      },
+      "illustrative": true,
+      "yMax": 100
+    },
+    "restart": {
+      "title": {
+        "ru": "web-серверы: CPU",
+        "en": "web servers: CPU"
+      },
+      "unit": "%",
+      "x": [
+        "14:48",
+        "14:49",
+        "14:50",
+        "14:51",
+        "14:52"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "CPU",
+            "en": "CPU"
+          },
+          "values": [
+            100,
+            0,
+            100,
+            100,
+            100
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что было бы при этом действии. В разборе такого шага нет; пост остаётся на главной, и первый же её просмотр снова загружает CPU.",
+        "en": "Illustration: what this action would have led to. The postmortem has no such step; the post stays on the home page, and the first view loads CPU again."
+      },
+      "illustrative": true,
+      "marks": [
+        {
+          "x": "14:49",
+          "label": {
+            "ru": "рестарт",
+            "en": "restart"
+          }
+        }
+      ],
+      "yMax": 100
+    },
+    "morecap": {
+      "title": {
+        "ru": "Балансировщик: web-серверы в ротации",
+        "en": "Load balancer: web servers in rotation"
+      },
+      "unit": "%",
+      "x": [
+        "14:54",
+        "14:56",
+        "14:58",
+        "15:00",
+        "15:02"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "в ротации",
+            "en": "in rotation"
+          },
+          "values": [
+            0,
+            0,
+            15,
+            0,
+            0
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что было бы при этом действии. В разборе такого шага нет; новые серверы рендерят ту же главную и так же проваливают health check.",
+        "en": "Illustration: what this action would have led to. The postmortem has no such step; new servers render the same home page and fail the health check the same way."
+      },
+      "illustrative": true,
+      "marks": [
+        {
+          "x": "14:56",
+          "label": {
+            "ru": "новые серверы",
+            "en": "new servers"
+          }
+        }
+      ],
+      "yMax": 100
+    },
+    "wait": {
+      "title": {
+        "ru": "Stack Overflow: доступность",
+        "en": "Stack Overflow: availability"
+      },
+      "unit": "%",
+      "x": [
+        "14:54",
+        "15:00",
+        "15:06",
+        "15:12",
+        "15:18"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "доступность",
+            "en": "availability"
+          },
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что было бы при этом действии. В разборе такого шага нет; пока пост в списке главной, сайт лежит.",
+        "en": "Illustration: what this action would have led to. The postmortem has no such step; while the post is in the home page list, the site stays down."
+      },
+      "illustrative": true,
+      "yMax": 100
+    }
+  }
+}
+  </script>
+  <script src="../player.js"></script>
+</body>
+</html>

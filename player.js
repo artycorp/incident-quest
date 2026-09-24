@@ -27,12 +27,17 @@
     if (text != null) e.textContent = text;
     return e;
   };
-  const LINK = /\[([^\]]+)\]\((chart:[\w-]+(?:@[\d:.]+)?|https:\/\/[^)\s]+|[\w.-]+\.html)\)/g;
+  const LINK = /\[([^\]]+)\]\((chart:[\w-]+(?:@[\d:.]+)?|https:\/\/[^)\s]+|[\w.-]+\.html)\)|`([^`]+)`/g;
   const epId = location.pathname.match(/([\w-]+)\.html$/)?.[1];
   const rich = (text, parent) => {
     let i = 0;
     for (const m of text.matchAll(LINK)) {
       parent.append(text.slice(i, m.index));
+      i = m.index + m[0].length;
+      if (m[3] != null) {
+        parent.append(el('code', null, m[3]));
+        continue;
+      }
       const chart = m[2].startsWith('chart:');
       const a = el('a', chart ? 'chart-link' : null, m[1]);
       const [id, until] = m[2].slice(6).split('@');
@@ -40,7 +45,6 @@
       a.target = '_blank';
       a.rel = 'noopener';
       parent.append(a);
-      i = m.index + m[0].length;
     }
     parent.append(text.slice(i));
   };
@@ -265,10 +269,16 @@
         ctx.textAlign = left ? 'right' : 'left';
         ctx.fillText(label, x + (left ? -6 : 4) * dpr, y);
       };
+      const rows = [];
       for (const m of c.marks ?? []) {
         if (markX(m.x) > cut) continue;
-        const nearRight = u.valToPos(markX(m.x), 'x', true) > bbox.left + bbox.width * 0.65;
-        line(markX(m.x), t(m.label), bbox.top + 14 * dpr, nearRight);
+        const x = u.valToPos(markX(m.x), 'x', true), w = ctx.measureText(t(m.label)).width + 10 * dpr;
+        const nearRight = x > bbox.left + bbox.width * 0.65;
+        const [from, to] = nearRight ? [x - w, x] : [x, x + w];
+        let r = 0;
+        while (rows[r] > from) r++;
+        rows[r] = to;
+        line(markX(m.x), t(m.label), bbox.top + (14 + 16 * r) * dpr, nearRight);
       }
       if (until != null) {
         ctx.setLineDash([]);
@@ -287,7 +297,7 @@
       },
       axes: [
         { ...axis, ...(time && { values: (u, vs) => vs.map(hhmm) }) },
-        { ...axis, label: c.unit, size: 56 },
+        { ...axis, label: c.unit && t(c.unit), size: 56 },
       ],
       series: [
         { label: time ? 'time' : t(c.xLabel ?? ''), value: (u, v) => v == null ? '—' : time ? hhmm(v) : v },
