@@ -16,7 +16,7 @@ Each episode is one PR on branch `episode/NNN` containing exactly:
 Steps:
 
 1. **Number.** `NNN` = highest number among `episodes/*.html` and open `episode/*` branches, plus 1, zero-padded to 3 digits.
-2. **Pick.** Take the first `todo` incident in `sources.md`. Done when you have one incident whose root cause is load-shaped (see *Load-shaped*).
+2. **Pick.** Take the first `todo` incident in `sources.md`. Done when you have one incident whose root cause is load-shaped (see *Load-shaped*). Prefer simple ones: a single mechanism a reader can guess from the charts, 1–3 components, no chain of several independent failures. When adding incidents, keep the table ordered simplest first.
 3. **Read the source.** Read the full original postmortem. Done when you can list its timeline, the symptoms engineers saw, the root cause, the mitigation, and every number you plan to use, each traceable to a sentence in the source.
 4. **Write `episodes/NNN.html`** following *Episode format*. Done when every step on the spine is backed by the source and every text field has both `ru` and `en`.
 5. **Draw the service diagram** following *Service diagram*.
