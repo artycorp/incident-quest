@@ -103,6 +103,7 @@
     const state = { step: 0, steps: ep.steps.map(s => ({ order: shuffle(s.options.length), tried: [], checks: {}, solved: false })) };
 
     render = () => {
+      const y = scrollY;
       clearPlots();
       app.replaceChildren();
       header(t(ep.title), '../');
@@ -175,6 +176,7 @@
         out.append(el('p', 'score', UI[lang].mistakes(mistakes)));
         app.append(out);
       }
+      scrollTo(0, y);
     };
     render();
   }
