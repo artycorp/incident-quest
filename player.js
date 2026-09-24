@@ -3,11 +3,13 @@
     ru: { step: 'Шаг', next: 'Дальше', reveal: 'Что было на самом деле', source: 'Источник',
           mistakes: n => n ? `Тупиков по пути: ${n}` : 'Ни одного тупика — отличное расследование!',
           now: 'сейчас', illustrativeShort: 'иллюстрация', illustrative: 'Иллюстрация: в источнике нет цифр, значения придуманы по описанию в тексте.', back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
-          noChart: 'График не найден.' },
+          noChart: 'График не найден.', checkQ: 'Что видишь на графике?',
+          checkOk: 'Всё в порядке, вернуться к развилке', checkBad: 'Есть деградация' },
     en: { step: 'Step', next: 'Next', reveal: 'What really happened', source: 'Source',
           mistakes: n => n ? `Dead ends on the way: ${n}` : 'No dead ends — great investigation!',
           now: 'now', illustrativeShort: 'illustration', illustrative: 'Illustration: the source has no numbers, values are made up from the description.', back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
-          noChart: 'Chart not found.' },
+          noChart: 'Chart not found.', checkQ: 'What does the chart show?',
+          checkOk: 'All fine, back to the fork', checkBad: 'Degradation' },
   };
   const store = {
     get: k => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -98,7 +100,7 @@
   }
 
   function playEpisode(ep) {
-    const state = { step: 0, steps: ep.steps.map(s => ({ order: shuffle(s.options.length), tried: [], solved: false })) };
+    const state = { step: 0, steps: ep.steps.map(s => ({ order: shuffle(s.options.length), tried: [], checks: {}, solved: false })) };
 
     render = () => {
       clearPlots();
@@ -115,10 +117,11 @@
         box.append(el('h2', null, `${UI[lang].step} ${i + 1}/${ep.steps.length}`));
         paras(t(s.text), box);
         if (s.chart) box.append(inlineChart(ep, s.chart));
+        const pending = st.tried.some(j => s.options[j].chart && !s.options[j].correct && !(j in st.checks));
         for (const j of st.solved ? st.tried : st.order) {
           const o = s.options[j], tried = st.tried.includes(j);
           const b = el('button', 'option', t(o.text));
-          b.disabled = st.solved || tried;
+          b.disabled = st.solved || tried || pending;
           if (tried) b.classList.add(o.correct ? 'right' : 'wrong');
           b.onclick = () => {
             st.tried.push(j);
@@ -126,12 +129,24 @@
             render();
           };
           box.append(b);
-          if (tried) {
-            const r = el('div', `result ${o.correct ? 'right' : 'wrong'}`);
+          if (!tried) continue;
+          const r = el('div', `result ${o.correct ? 'right' : 'wrong'}`);
+          if (o.correct || !o.chart) {
             paras(t(o.result), r);
             if (o.chart) r.append(inlineChart(ep, o.chart));
-            box.append(r);
+          } else {
+            const said = st.checks[j];
+            r.append(inlineChart(ep, o.chart), el('p', null, UI[lang].checkQ));
+            for (const bad of [false, true]) {
+              const c = el('button', 'option check', bad ? UI[lang].checkBad : UI[lang].checkOk);
+              c.disabled = said !== undefined;
+              if (said === bad) c.classList.add(bad === !!o.degraded ? 'right' : 'wrong');
+              c.onclick = () => { st.checks[j] = bad; render(); };
+              r.append(c);
+            }
+            if (said !== undefined) paras(t(said === !!o.degraded ? o.result : o.miss), r);
           }
+          box.append(r);
         }
         if (st.solved && i === state.step) {
           const isLast = i === ep.steps.length - 1;
