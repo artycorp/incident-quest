@@ -1,0 +1,1143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Убийство в канун Дня благодарения</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main id="app"></main>
+  <script type="application/json" id="episode">
+{
+  "title": {
+    "ru": "Убийство в канун Дня благодарения",
+    "en": "Murder on Thanksgiving Eve"
+  },
+  "source": {
+    "title": "AWS: Summary of the Amazon Kinesis Event in the Northern Virginia (US-EAST-1) Region (2020)",
+    "url": "https://aws.amazon.com/message/11201/"
+  },
+  "intro": {
+    "ru": "25 ноября 2020 года, AWS, регион us-east-1. На Kinesis Data Streams опираются другие сервисы AWS: Cognito, CloudWatch, EventBridge.\n\nЗапросы принимает front-end fleet из многих тысяч серверов. Он проверяет доступ, применяет throttling и направляет запросы в нужные шарды на back-end кластерах. Для маршрутизации каждый front-end сервер держит кеш shard-map.\n\n05:15 PST. Срабатывают первые алармы ([график ошибок](chart:errors@05:15)). Ты дежурный.",
+    "en": "November 25, 2020, AWS, us-east-1. Kinesis Data Streams sits underneath other AWS services: Cognito, CloudWatch, EventBridge.\n\nRequests arrive at a front-end fleet of many thousands of servers. It handles authentication, throttling and routing to the right stream shards on the back-end clusters. To route, every front-end server keeps a cache called the shard-map.\n\n5:15 AM PST. The first alarms fire ([error chart](chart:errors@05:15)). You are on call."
+  },
+  "steps": [
+    {
+      "text": {
+        "ru": "05:15. Алармы: ошибки при записи и чтении Kinesis. Ночью, с 02:44 до 03:47, во front-end fleet добавляли мощность. Но часть ошибок с новыми серверами не связана и осталась бы и без них. Что делаешь первым?",
+        "en": "5:15 AM. Alarms: errors putting and getting Kinesis records. Overnight, from 2:44 to 3:47, capacity was added to the front-end fleet. But some errors have nothing to do with the new servers and would likely persist without them. What do you do first?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "На всякий случай убираю новую мощность и параллельно разбираю остальные ошибки",
+            "en": "Remove the new capacity as a precaution and keep digging into the other errors"
+          },
+          "correct": true,
+          "chart": "errors@05:15",
+          "result": {
+            "ru": "Новая мощность — главный подозреваемый, хотя доказательств нет. Начинаешь убирать её, не дожидаясь доказательств, и ищешь дальше.\n\nДиагностику тормозит пестрота ошибок: они во всех видах вызовов, у старых и новых серверов, и следствия трудно отделить от причины.",
+            "en": "The new capacity is the prime suspect, though there is no proof. You start removing it without waiting for proof and keep looking.\n\nThe variety of errors slows the diagnosis: they show up in every kind of call, on old and new servers alike, and side effects are hard to tell from the cause."
+          }
+        },
+        {
+          "text": {
+            "ru": "Открываю дашборды CloudWatch по Kinesis",
+            "en": "Open the CloudWatch dashboards for Kinesis"
+          },
+          "correct": false,
+          "chart": "cloudwatch",
+          "degraded": true,
+          "result": {
+            "ru": "Дашборды ослепли: CloudWatch сам пишет метрики и логи через Kinesis. С 05:15 у него ошибки PutMetricData и PutLogEvents, алармы ушли в INSUFFICIENT_DATA. Вернись к развилке.",
+            "en": "The dashboards have gone blind: CloudWatch itself processes metrics and logs through Kinesis. From 5:15 PutMetricData and PutLogEvents fail and alarms go to INSUFFICIENT_DATA. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: с 05:15 метрики почти не доходят. CloudWatch сам работает через Kinesis и ослеп вместе с ним. Вернись к развилке.",
+            "en": "Look again: from 5:15 almost no datapoints arrive. CloudWatch itself runs on Kinesis and went blind with it. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Жду: fleet после расширения сам стабилизируется",
+            "en": "Wait: the fleet will settle down after the expansion on its own"
+          },
+          "correct": false,
+          "chart": "wait",
+          "degraded": true,
+          "result": {
+            "ru": "Ничего не проходит само: ошибки держатся часами, а вслед за Kinesis деградируют Cognito, CloudWatch и EventBridge. Вернись к развилке.",
+            "en": "Nothing goes away on its own: errors hold for hours, and Cognito, CloudWatch and EventBridge degrade along with Kinesis. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: ошибки не уходят, а растут. Вернись к развилке.",
+            "en": "Look again: the errors do not go away, they grow. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Добавляю ещё серверов во front-end, чтобы разгрузить fleet",
+            "en": "Add even more front-end servers to take the load off the fleet"
+          },
+          "correct": false,
+          "chart": "morecap",
+          "degraded": true,
+          "result": {
+            "ru": "Ошибок становится больше, а не меньше. Лишние серверы fleet не лечат. Вернись к развилке.",
+            "en": "Errors go up, not down. Extra servers do not heal this fleet. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: после новых серверов ошибок стало больше. Вернись к развилке.",
+            "en": "Look again: after the new servers there are more errors. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "07:51. Круг подозреваемых сузился до пары кандидатов. Главный — что-то, что создаёт давление на память. Любой фикс требует поменять конфигурацию каждого front-end сервера и перезапустить весь fleet из многих тысяч серверов, а это долгий и аккуратный процесс. Что делаешь?",
+        "en": "7:51 AM. The suspects are down to a couple of candidates. The leading one is something that seems to create memory pressure. Any fix means changing the configuration of every front-end server and restarting the whole fleet of many thousands of servers, a long and careful process. What do you do?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Ищу подтверждение, а пока ускоряю будущий рестарт",
+            "en": "Keep looking for proof and speed up the coming restart meanwhile"
+          },
+          "correct": true,
+          "chart": "cognito@07:51",
+          "result": {
+            "ru": "Если поставить на память и ошибиться, придётся чинить и перезапускать второй раз, и восстановление удвоится. Пока ищешь, серверам добавляют настройку: при старте брать данные из авторитетного хранилища метаданных, а не от соседей по fleet.\n\nЦена каждого часа растёт: с 07:01 резко выросли ошибки Cognito. Он буферизует данные для Kinesis, и скрытый баг в буфере заставил его веб-серверы блокироваться. Пользователи не могут залогиниться.",
+            "en": "Bet on memory and be wrong, and you fix and restart a second time, doubling the recovery. While you look, the servers get a setting to bootstrap from the authoritative metadata store instead of from their fleet neighbours.\n\nEvery hour costs more: from 7:01 Cognito errors rose sharply. Cognito buffers data for Kinesis, and a latent bug in that buffer made its web servers block. Users cannot sign in."
+          }
+        },
+        {
+          "text": {
+            "ru": "Ставлю на память: выкатываю фикс и перезапускаю fleet",
+            "en": "Bet on memory: roll out the fix and restart the fleet"
+          },
+          "correct": false,
+          "chart": "double",
+          "degraded": true,
+          "result": {
+            "ru": "Если память не причина, после многочасового рестарта ошибки останутся, и всё придётся повторить со вторым фиксом. Восстановление удвоится. Вернись к развилке.",
+            "en": "If memory is not the cause, the errors survive an hours-long restart and you do it all again with a second fix. Recovery doubles. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: рестарт завершён, а ошибки на месте. Вернись к развилке.",
+            "en": "Look again: the restart is done and the errors are still there. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Добавляю front-end серверам памяти",
+            "en": "Give the front-end servers more memory"
+          },
+          "correct": false,
+          "chart": "bigmem",
+          "degraded": false,
+          "result": {
+            "ru": "Память теперь в порядке, а ошибки на прежнем уровне. Давление на память было следствием, а не причиной. Вернись к развилке.",
+            "en": "Memory is fine now, and the errors stay where they were. Memory pressure was a side effect, not the cause. Back to the fork."
+          },
+          "miss": {
+            "ru": "Всё хорошо: памяти теперь с запасом. Значит, ошибки не из-за неё. Вернись к развилке.",
+            "en": "All fine: there is plenty of memory now. So the errors are not about memory. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Перезапускаю весь fleet прямо сейчас: рестарт сбросит состояние",
+            "en": "Restart the whole fleet right now: a restart resets the state"
+          },
+          "correct": false,
+          "chart": "allatonce",
+          "degraded": true,
+          "result": {
+            "ru": "При старте сервер строит shard-map теми же ресурсами, что обрабатывают запросы. Поднятые разом серверы захлебнутся, будут признаны нездоровыми и выброшены из fleet, и восстановление откатится назад. Вернись к развилке.",
+            "en": "On startup a server builds its shard-map with the same resources that serve requests. Servers brought back all at once choke, get marked unhealthy and removed from the fleet, and recovery goes backwards. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: серверы поднялись и снова выпали из строя. Вернись к развилке.",
+            "en": "Look again: the servers came up and dropped out again. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "09:39. Версия с памятью не подтвердилась. Открываешь потоки ОС на front-end серверах. Что видишь?",
+        "en": "9:39 AM. The memory theory did not hold. You open OS threads on the front-end servers. What do you see?"
+      },
+      "chart": "threads@09:39",
+      "options": [
+        {
+          "text": {
+            "ru": "Всё в порядке: потоков сейчас меньше лимита",
+            "en": "All fine: threads are below the limit right now"
+          },
+          "correct": false,
+          "chart": "shardmap@09:39",
+          "degraded": true,
+          "result": {
+            "ru": "Верно, это беда: почти ни у одного сервера нет рабочей shard-map. Ниже лимита потоки только сейчас, когда новую мощность уже убрали. А с утра они были выше. Вернись к развилке.",
+            "en": "Right, that is the trouble: almost no server has a working shard-map. Threads are below the limit only now, with the new capacity already removed. All morning they were above it. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: почти ни у одного сервера нет рабочей shard-map. Ниже лимита потоки только сейчас, а с утра были выше. Вернись к развилке.",
+            "en": "Look again: almost no server has a working shard-map. Threads are below the limit only now; all morning they were above it. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Деградация: после расширения потоки превысили лимит ОС",
+            "en": "Degradation: after the expansion threads went over the OS limit"
+          },
+          "correct": true,
+          "chart": "fleet@09:39",
+          "result": {
+            "ru": "Именно. Каждый front-end сервер создаёт поток ОС на каждый другой сервер fleet, так что потоков у каждого пропорционально размеру fleet. Новая мощность увела все серверы за лимит потоков ОС.\n\nПостроение кеша не завершалось, и серверы остались с бесполезными shard-map: они не знали, в какой back-end кластер вести запрос. Удаление новой мощности как раз завершилось.",
+            "en": "Exactly. Every front-end server creates an OS thread for every other server in the fleet, so each server’s thread count is proportional to the fleet size. The new capacity pushed every server past the OS thread limit.\n\nCache construction failed to complete and servers were left with useless shard-maps: they could not tell which back-end cluster a request belongs to. The removal of the new capacity has just finished."
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "09:39. Причина найдена, новую мощность только что убрали. Как возвращаешь Kinesis?",
+        "en": "9:39 AM. Root cause found, the new capacity was just removed. How do you bring Kinesis back?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Лимит ОС не трогаю и поднимаю fleet медленно, группами",
+            "en": "Leave the OS limit alone and bring the fleet back slowly, in groups"
+          },
+          "correct": true,
+          "chart": "errors@22:23",
+          "result": {
+            "ru": "Без новой мощности потоки больше не превышают лимит, а поднимать лимит без тестов рискованно. Первые серверы берут трафик в 10:07. Но добавлять их можно лишь по несколько сотен в час: построение shard-map конкурирует с обработкой запросов.\n\nОшибки стабильно падают с полудня, Kinesis полностью в норме в 22:23.",
+            "en": "Without the new capacity the threads no longer exceed the limit, and raising an untested limit is a risk. The first servers take traffic at 10:07. But they can only be added a few hundred per hour: building the shard-map competes with serving requests.\n\nErrors fall steadily from noon, and Kinesis is fully back at 10:23 PM."
+          }
+        },
+        {
+          "text": {
+            "ru": "Поднимаю лимит потоков ОС на всех серверах",
+            "en": "Raise the OS thread limit on every server"
+          },
+          "correct": false,
+          "chart": "limitup",
+          "degraded": false,
+          "result": {
+            "ru": "На графике спокойно, но это непроверенная конфигурация на многих тысячах серверов. AWS не стал поднимать лимит без тестов: мощность уже убрана, и запас по потокам есть и так. Вернись к развилке.",
+            "en": "The chart looks calm, but it is an untested configuration on many thousands of servers. AWS chose not to raise the limit without testing: the capacity is already gone and there is headroom anyway. Back to the fork."
+          },
+          "miss": {
+            "ru": "Всё хорошо: потоки ниже нового лимита. Но нужды в нём нет, мощность уже убрана, а непроверенный лимит на тысячах серверов — лишний риск. Вернись к развилке.",
+            "en": "All fine: threads are below the new limit. But it is not needed, the capacity is gone, and an untested limit on thousands of servers is needless risk. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Возвращаю новую мощность: раз причина в лимите, серверы не виноваты",
+            "en": "Put the new capacity back: the limit is to blame, not the servers"
+          },
+          "correct": false,
+          "chart": "capback",
+          "degraded": true,
+          "result": {
+            "ru": "Каждый новый сервер — это ещё один поток на каждом сервере fleet. Потоки снова выше лимита, и всё начинается сначала. Вернись к развилке.",
+            "en": "Every new server is one more thread on every server in the fleet. Threads go over the limit again and it all starts over. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: потоки снова выше лимита. Вернись к развилке.",
+            "en": "Look again: threads are over the limit again. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Поднимаю весь fleet разом, чтобы быстрее",
+            "en": "Bring the whole fleet back at once to go faster"
+          },
+          "correct": false,
+          "chart": "allatonce",
+          "degraded": true,
+          "result": {
+            "ru": "Серверы строят shard-map теми же ресурсами, что обрабатывают запросы. Поднятые разом, они захлебнутся, будут признаны нездоровыми и выброшены из fleet. Вернись к развилке.",
+            "en": "Servers build their shard-map with the same resources that serve requests. Brought back at once, they choke, get marked unhealthy and are removed from the fleet. Back to the fork."
+          },
+          "miss": {
+            "ru": "Посмотри ещё раз: серверы поднялись и снова выпали из строя. Вернись к развилке.",
+            "en": "Look again: the servers came up and dropped out again. Back to the fork."
+          }
+        }
+      ]
+    }
+  ],
+  "outro": {
+    "ru": "Каждый front-end сервер держал по потоку ОС на каждый другой сервер fleet. Небольшое добавление мощности увело все серверы за лимит потоков ОС ([потоки](chart:threads)). Кеш shard-map перестал строиться, и fleet не мог маршрутизировать запросы. Без мощности и после медленного рестарта Kinesis восстановился к 22:23.\n\nПо цепочке упали Cognito ([график](chart:cognito)) и CloudWatch, от которого зависят AutoScaling и Lambda. Даже статус на Service Health Dashboard сначала не могли обновить: инструмент для публикации сам использует Cognito.\n\nДля нагрузочника: потоков на сервер пропорционально размеру fleet, а всего в fleet — квадрату. Такой лимит не ловит тест «больше RPS на тот же кластер», его ловит тест «тот же RPS на кластере больше». AWS добавил алармы на потребление потоков, переходит на более крупные серверы (их меньше, значит меньше потоков) и делит front-end на cells, чтобы каждая работала в проверенном диапазоне.\n\n[Весь инцидент на графике ошибок](chart:errors)",
+    "en": "Every front-end server kept one OS thread for every other server in the fleet. A small capacity addition pushed every server past the OS thread limit ([threads](chart:threads)). The shard-map cache stopped building and the fleet could not route requests. With the capacity removed and a slow restart, Kinesis recovered at 10:23 PM.\n\nCognito ([chart](chart:cognito)) and CloudWatch, which AutoScaling and Lambda depend on, went down with it. At first AWS could not even update the Service Health Dashboard: the posting tool itself uses Cognito.\n\nFor load testers: threads per server grow with the fleet size, and threads across the fleet grow with its square. A test of “more RPS on the same cluster” never finds that limit; a test of “the same RPS on a bigger cluster” does. AWS added alarms on thread consumption, is moving to larger servers (fewer of them, so fewer threads) and is splitting the front-end into cells, each running in a tested range.\n\n[The whole incident on the error chart](chart:errors)"
+  },
+  "charts": {
+    "errors": {
+      "title": {
+        "ru": "Kinesis: ошибки записи и чтения",
+        "en": "Kinesis: put and get errors"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "02:30",
+        "02:44",
+        "03:47",
+        "04:47",
+        "05:15",
+        "06:00",
+        "07:01",
+        "07:51",
+        "09:00",
+        "09:39",
+        "10:07",
+        "10:15",
+        "12:00",
+        "12:15",
+        "14:18",
+        "17:47",
+        "20:00",
+        "22:23",
+        "22:31",
+        "23:00"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "ошибки",
+            "en": "errors"
+          },
+          "values": [
+            0.1,
+            0.1,
+            0.1,
+            0.1,
+            40,
+            60,
+            65,
+            65,
+            65,
+            65,
+            62,
+            60,
+            55,
+            50,
+            38,
+            22,
+            10,
+            0.1,
+            0.1,
+            0.1
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: в разборе нет цифр ошибок, есть только события: алармы в 05:15, первые серверы с трафиком в 10:07, ошибки падают с полудня, норма в 22:23. Времена из разбора AWS, PST.",
+        "en": "Illustration: the summary gives no error numbers, only events: alarms at 5:15, first servers taking traffic at 10:07, errors falling from noon, normal at 22:23. Times are from the AWS summary, PST."
+      },
+      "marks": [
+        {
+          "x": "05:15",
+          "label": {
+            "ru": "алармы",
+            "en": "alarms"
+          }
+        },
+        {
+          "x": "10:07",
+          "label": {
+            "ru": "первые серверы",
+            "en": "first servers"
+          }
+        },
+        {
+          "x": "22:23",
+          "label": {
+            "ru": "норма",
+            "en": "normal"
+          }
+        }
+      ]
+    },
+    "cognito": {
+      "title": {
+        "ru": "Cognito: ошибки API",
+        "en": "Cognito: API errors"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "02:30",
+        "02:44",
+        "03:47",
+        "04:47",
+        "05:15",
+        "06:00",
+        "07:01",
+        "07:51",
+        "09:00",
+        "09:39",
+        "10:07",
+        "10:15",
+        "12:00",
+        "12:15",
+        "14:18",
+        "17:47",
+        "20:00",
+        "22:23",
+        "22:31",
+        "23:00"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "ошибки",
+            "en": "errors"
+          },
+          "values": [
+            0.1,
+            0.1,
+            0.1,
+            0.1,
+            5,
+            3,
+            30,
+            35,
+            35,
+            35,
+            35,
+            33,
+            15,
+            8,
+            0.1,
+            0.1,
+            0.1,
+            0.1,
+            0.1,
+            0.1
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: иллюстрирует «добавленная мощность сначала снизила влияние, но к 7:01 ошибки значительно выросли»; фикс Cognito в 10:15, норма в 14:18. Времена из разбора AWS, PST.",
+        "en": "Illustration: illustrates “added capacity initially reduced impact, but by 7:01 AM error rates increased significantly”; Cognito fix at 10:15, normal at 14:18. Times are from the AWS summary, PST."
+      },
+      "marks": [
+        {
+          "x": "07:01",
+          "label": {
+            "ru": "рост ошибок",
+            "en": "errors up"
+          }
+        },
+        {
+          "x": "10:15",
+          "label": {
+            "ru": "фикс Cognito",
+            "en": "Cognito fix"
+          }
+        }
+      ]
+    },
+    "threads": {
+      "title": {
+        "ru": "front-end сервер: потоки ОС",
+        "en": "front-end server: OS threads"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "02:30",
+        "02:44",
+        "03:47",
+        "04:47",
+        "05:15",
+        "06:00",
+        "07:01",
+        "07:51",
+        "09:00",
+        "09:39",
+        "10:07",
+        "10:15",
+        "12:00",
+        "12:15",
+        "14:18",
+        "17:47",
+        "20:00",
+        "22:23",
+        "22:31",
+        "23:00"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "потоки",
+            "en": "threads"
+          },
+          "values": [
+            90,
+            90,
+            95,
+            103,
+            103,
+            103,
+            102,
+            101,
+            100,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97
+          ]
+        },
+        {
+          "name": {
+            "ru": "лимит ОС",
+            "en": "OS limit"
+          },
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: в разборе нет числа потоков, есть факт: новая мощность заставила все серверы превысить лимит потоков ОС, а к 9:39 её уже убрали. Значения в процентах от лимита. Времена из разбора AWS, PST.",
+        "en": "Illustration: the summary has no thread counts, only the fact that the new capacity pushed every server past the OS thread limit and was removed by 9:39. Values are % of the limit. Times are from the AWS summary, PST."
+      },
+      "marks": [
+        {
+          "x": "02:44",
+          "label": {
+            "ru": "новая мощность",
+            "en": "new capacity"
+          }
+        }
+      ],
+      "yMax": 120
+    },
+    "fleet": {
+      "title": {
+        "ru": "front-end fleet: число серверов",
+        "en": "front-end fleet: server count"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "02:30",
+        "02:44",
+        "03:47",
+        "04:47",
+        "05:15",
+        "06:00",
+        "07:01",
+        "07:51",
+        "09:00",
+        "09:39",
+        "10:07",
+        "10:15",
+        "12:00",
+        "12:15",
+        "14:18",
+        "17:47",
+        "20:00",
+        "22:23",
+        "22:31",
+        "23:00"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "серверы",
+            "en": "servers"
+          },
+          "values": [
+            100,
+            100,
+            106,
+            106,
+            106,
+            105,
+            104,
+            103,
+            101,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: иллюстрирует «относительно небольшое добавление мощности» с 2:44 до 3:47 и её удаление к 9:39. 100 % — размер fleet до события. Времена из разбора AWS, PST.",
+        "en": "Illustration: illustrates the “relatively small addition of capacity” from 2:44 to 3:47 and its removal by 9:39. 100 % is the fleet size before the event. Times are from the AWS summary, PST."
+      },
+      "marks": [
+        {
+          "x": "02:44",
+          "label": {
+            "ru": "начало",
+            "en": "start"
+          }
+        },
+        {
+          "x": "03:47",
+          "label": {
+            "ru": "конец",
+            "en": "end"
+          }
+        }
+      ]
+    },
+    "shardmap": {
+      "title": {
+        "ru": "front-end: серверы с рабочей shard-map",
+        "en": "front-end: servers with a working shard-map"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "02:30",
+        "02:44",
+        "03:47",
+        "04:47",
+        "05:15",
+        "06:00",
+        "07:01",
+        "07:51",
+        "09:00",
+        "09:39",
+        "10:07",
+        "10:15",
+        "12:00",
+        "12:15",
+        "14:18",
+        "17:47",
+        "20:00",
+        "22:23",
+        "22:31",
+        "23:00"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "серверы",
+            "en": "servers"
+          },
+          "values": [
+            100,
+            100,
+            100,
+            90,
+            30,
+            10,
+            5,
+            5,
+            5,
+            5,
+            6,
+            8,
+            20,
+            22,
+            40,
+            70,
+            90,
+            100,
+            100,
+            100
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: иллюстрирует «построение кеша не завершалось, и серверы оставались с бесполезными shard-map»; восстановление по несколько сотен серверов в час с 10:07. Времена из разбора AWS, PST.",
+        "en": "Illustration: illustrates “cache construction was failing to complete … useless shard-maps”; recovery at a few hundred servers per hour from 10:07. Times are from the AWS summary, PST."
+      }
+    },
+    "memory": {
+      "title": {
+        "ru": "front-end сервер: память",
+        "en": "front-end server: memory"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "02:30",
+        "02:44",
+        "03:47",
+        "04:47",
+        "05:15",
+        "06:00",
+        "07:01",
+        "07:51",
+        "09:00",
+        "09:39",
+        "10:07",
+        "10:15",
+        "12:00",
+        "12:15",
+        "14:18",
+        "17:47",
+        "20:00",
+        "22:23",
+        "22:31",
+        "23:00"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "память",
+            "en": "memory"
+          },
+          "values": [
+            55,
+            55,
+            57,
+            60,
+            78,
+            82,
+            84,
+            85,
+            85,
+            85,
+            70,
+            65,
+            60,
+            60,
+            58,
+            57,
+            56,
+            55,
+            55,
+            55
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: иллюстрирует главного кандидата в 7:51 — «проблему, которая, похоже, создавала давление на память». Времена из разбора AWS, PST.",
+        "en": "Illustration: illustrates the 7:51 leading candidate, “an issue that seemed to be creating memory pressure”. Times are from the AWS summary, PST."
+      }
+    },
+    "cloudwatch": {
+      "title": {
+        "ru": "CloudWatch: метрики Kinesis",
+        "en": "CloudWatch: Kinesis metrics"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "04:50",
+        "04:55",
+        "05:00",
+        "05:05",
+        "05:10",
+        "05:15",
+        "05:20",
+        "05:25",
+        "05:30"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "принято точек",
+            "en": "datapoints accepted"
+          },
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            30,
+            null,
+            5,
+            null
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Что было бы: придуманный сценарий, в разборе AWS его нет.",
+        "en": "What would happen: an invented scenario, not in the AWS summary."
+      },
+      "marks": [
+        {
+          "x": "05:15",
+          "label": {
+            "ru": "INSUFFICIENT_DATA",
+            "en": "INSUFFICIENT_DATA"
+          }
+        }
+      ]
+    },
+    "wait": {
+      "title": {
+        "ru": "Kinesis: ошибки, если просто ждать",
+        "en": "Kinesis: errors if you just wait"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "05:15",
+        "06:00",
+        "07:00",
+        "08:00",
+        "09:00"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "ошибки",
+            "en": "errors"
+          },
+          "values": [
+            40,
+            60,
+            65,
+            65,
+            65
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Что было бы: придуманный сценарий, в разборе AWS его нет.",
+        "en": "What would happen: an invented scenario, not in the AWS summary."
+      }
+    },
+    "morecap": {
+      "title": {
+        "ru": "Kinesis: ошибки после новых серверов",
+        "en": "Kinesis: errors after more servers"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "05:15",
+        "05:30",
+        "06:00",
+        "06:30",
+        "07:00"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "ошибки",
+            "en": "errors"
+          },
+          "values": [
+            40,
+            45,
+            70,
+            85,
+            90
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Что было бы: придуманный сценарий, в разборе AWS его нет.",
+        "en": "What would happen: an invented scenario, not in the AWS summary."
+      },
+      "marks": [
+        {
+          "x": "05:30",
+          "label": {
+            "ru": "ещё серверы",
+            "en": "more servers"
+          }
+        }
+      ]
+    },
+    "double": {
+      "title": {
+        "ru": "Kinesis: ошибки при ставке на память",
+        "en": "Kinesis: errors when betting on memory"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "07:51",
+        "10:00",
+        "14:00",
+        "20:00",
+        "22:00"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "ошибки",
+            "en": "errors"
+          },
+          "values": [
+            65,
+            65,
+            62,
+            65,
+            65
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Что было бы: придуманный сценарий, в разборе AWS его нет.",
+        "en": "What would happen: an invented scenario, not in the AWS summary."
+      },
+      "marks": [
+        {
+          "x": "07:51",
+          "label": {
+            "ru": "фикс памяти, рестарт",
+            "en": "memory fix, restart"
+          }
+        },
+        {
+          "x": "20:00",
+          "label": {
+            "ru": "рестарт завершён",
+            "en": "restart done"
+          }
+        }
+      ]
+    },
+    "bigmem": {
+      "title": {
+        "ru": "front-end сервер: память после апгрейда",
+        "en": "front-end server: memory after upgrade"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "07:51",
+        "08:00",
+        "08:30",
+        "09:00",
+        "09:30"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "память",
+            "en": "memory"
+          },
+          "values": [
+            85,
+            85,
+            50,
+            50,
+            50
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Что было бы: придуманный сценарий, в разборе AWS его нет.",
+        "en": "What would happen: an invented scenario, not in the AWS summary."
+      },
+      "marks": [
+        {
+          "x": "08:00",
+          "label": {
+            "ru": "больше памяти",
+            "en": "more memory"
+          }
+        }
+      ]
+    },
+    "limitup": {
+      "title": {
+        "ru": "front-end сервер: потоки ОС",
+        "en": "front-end server: OS threads"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "09:39",
+        "10:00",
+        "10:30",
+        "11:00",
+        "11:30"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "потоки",
+            "en": "threads"
+          },
+          "values": [
+            97,
+            97,
+            97,
+            97,
+            97
+          ]
+        },
+        {
+          "name": {
+            "ru": "лимит ОС",
+            "en": "OS limit"
+          },
+          "values": [
+            100,
+            150,
+            150,
+            150,
+            150
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Что было бы: придуманный сценарий, в разборе AWS его нет.",
+        "en": "What would happen: an invented scenario, not in the AWS summary."
+      },
+      "marks": [
+        {
+          "x": "10:00",
+          "label": {
+            "ru": "новый лимит",
+            "en": "new limit"
+          }
+        }
+      ],
+      "yMax": 160
+    },
+    "capback": {
+      "title": {
+        "ru": "front-end сервер: потоки ОС",
+        "en": "front-end server: OS threads"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "09:39",
+        "10:00",
+        "10:30",
+        "11:00",
+        "11:30"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "потоки",
+            "en": "threads"
+          },
+          "values": [
+            97,
+            98,
+            103,
+            104,
+            104
+          ]
+        },
+        {
+          "name": {
+            "ru": "лимит ОС",
+            "en": "OS limit"
+          },
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Что было бы: придуманный сценарий, в разборе AWS его нет.",
+        "en": "What would happen: an invented scenario, not in the AWS summary."
+      },
+      "marks": [
+        {
+          "x": "10:00",
+          "label": {
+            "ru": "мощность вернули",
+            "en": "capacity back"
+          }
+        }
+      ],
+      "yMax": 120
+    },
+    "allatonce": {
+      "title": {
+        "ru": "front-end: серверы в строю",
+        "en": "front-end: servers in service"
+      },
+      "unit": "%",
+      "illustrative": true,
+      "x": [
+        "09:39",
+        "10:00",
+        "10:30",
+        "11:00",
+        "11:30"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "серверы",
+            "en": "servers"
+          },
+          "values": [
+            0,
+            40,
+            70,
+            25,
+            10
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Что было бы: придуманный сценарий, в разборе AWS его нет.",
+        "en": "What would happen: an invented scenario, not in the AWS summary."
+      },
+      "marks": [
+        {
+          "x": "10:00",
+          "label": {
+            "ru": "все разом",
+            "en": "all at once"
+          }
+        }
+      ]
+    }
+  }
+}
+  </script>
+  <script src="../player.js"></script>
+</body>
+</html>
