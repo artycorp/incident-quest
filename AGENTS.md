@@ -85,12 +85,16 @@ Rules:
 - **Intro** sets the scene in 2–4 sentences: the service, the time, the first symptom. The company may be named.
 - **Outro** is "what really happened": the actual root cause, mitigation, and the lesson for load testing (what test or metric would have caught it). 1–3 paragraphs.
 - **Language.** RU is the primary text, written naturally for Russian-speaking engineers, keeping technical terms in English (`p99`, `thread pool`, `retry storm`). EN is an equal-quality rewrite for LinkedIn, not a literal translation. Paragraphs are separated by a blank line (`\n\n`).
-- **Links.** Any text field may contain `[label](chart:<id>)`, which opens chart `<id>` from `charts` on a separate page, or `[label](https://...)` for an external link. These are the only two link forms the player renders.
+- **Links.** Any text field may contain `[label](chart:<id>@<moment>)`, which opens chart `<id>` from `charts` on a separate page cut at `<moment>`, or `[label](https://...)` for an external link. These are the only two link forms the player renders.
 - **Step 1 doubles as the Telegram quiz poll**, so its `text.ru` fits in 300 characters and each option's `text.ru` fits in 100 characters.
 
 ## Charts
 
 Charts are optional. Add one where the source gives numbers a reader would want to see as a shape: latency before and after, a limit being hit, a recovery curve. Link it from the text at the moment the reader needs it (the intro's first symptom, or the `result` that reveals the metric).
+
+**The chart shows only what the on-call knows at that moment of the story.** Every chart link in `intro` and `steps` carries the story's current moment: `chart:p99@00:07` when the pager fires, `chart:p99@00:12` in a step that says five minutes have passed. The page draws points up to that moment, marks it with a "now" line, and hides everything after it, so the chart never spoils the next step. One chart can be linked from several steps with a later moment each time. Only `outro` links the uncut chart: `chart:p99`.
+
+- `x` contains a point at every moment a link cuts at, so the "now" line always lands on data.
 
 - **Data comes from the source.** Every point in `values` and every `marks` time is a number or timestamp stated in the postmortem. Where the source gives only a few numbers, plot only those points; the line between them is the honest shape.
 - `note` says what the chart is drawn from, e.g. "Points from the numbers in the AWS summary; times are PST."

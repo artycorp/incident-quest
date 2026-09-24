@@ -2,11 +2,11 @@
   const UI = {
     ru: { step: 'Шаг', next: 'Дальше', reveal: 'Что было на самом деле', source: 'Источник',
           mistakes: n => n ? `Тупиков по пути: ${n}` : 'Ни одного тупика — отличное расследование!',
-          back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
+          now: 'сейчас', back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
           noChart: 'График не найден.' },
     en: { step: 'Step', next: 'Next', reveal: 'What really happened', source: 'Source',
           mistakes: n => n ? `Dead ends on the way: ${n}` : 'No dead ends — great investigation!',
-          back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
+          now: 'now', back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
           noChart: 'Chart not found.' },
   };
   const store = {
@@ -25,7 +25,7 @@
     if (text != null) e.textContent = text;
     return e;
   };
-  const LINK = /\[([^\]]+)\]\((chart:[\w-]+|https:\/\/[^)\s]+)\)/g;
+  const LINK = /\[([^\]]+)\]\((chart:[\w-]+(?:@[\d:.]+)?|https:\/\/[^)\s]+)\)/g;
   const epId = location.pathname.match(/([\w-]+)\.html$/)?.[1];
   const rich = (text, parent) => {
     let i = 0;
@@ -33,7 +33,8 @@
       parent.append(text.slice(i, m.index));
       const chart = m[2].startsWith('chart:');
       const a = el('a', chart ? 'chart-link' : null, m[1]);
-      a.href = chart ? `../chart.html?ep=${epId}&id=${m[2].slice(6)}&lang=${lang}` : m[2];
+      const [id, until] = m[2].slice(6).split('@');
+      a.href = chart ? `../chart.html?ep=${epId}&id=${id}${until ? `&until=${until}` : ''}&lang=${lang}` : m[2];
       a.target = '_blank';
       a.rel = 'noopener';
       parent.append(a);
@@ -208,6 +209,9 @@
         return [...acc, m];
       }, []);
       const markX = v => toMin(v) + (time && toMin(v) < xs[0] ? 1440 : 0);
+      const until = params.get('until');
+      const cut = until == null ? Infinity : markX(until);
+      const n = xs.filter(x => x <= cut).length;
       const colors = ['--s1', '--s2', '--s3'].map(css);
       const axis = { stroke: css('--muted'), grid: { stroke: css('--line'), width: 1 }, ticks: { show: false } };
       const size = () => ({ width: box.clientWidth, height: Math.max(240, Math.min(380, innerHeight * 0.5)) });
@@ -218,19 +222,28 @@
         ctx.lineWidth = dpr;
         ctx.strokeStyle = ctx.fillStyle = css('--muted');
         ctx.font = `${12 * dpr}px ${css('--ui')}`;
-        for (const m of c.marks ?? []) {
-          const x = Math.round(u.valToPos(markX(m.x), 'x', true));
+        const line = (x, label, y) => {
+          x = Math.round(u.valToPos(x, 'x', true));
           ctx.beginPath();
           ctx.moveTo(x, bbox.top);
           ctx.lineTo(x, bbox.top + bbox.height);
           ctx.stroke();
-          ctx.fillText(t(m.label), x + 4 * dpr, bbox.top + 14 * dpr);
+          ctx.fillText(label, x + 4 * dpr, y);
+        };
+        for (const m of c.marks ?? []) {
+          if (markX(m.x) <= cut) line(markX(m.x), t(m.label), bbox.top + 14 * dpr);
+        }
+        if (until != null) {
+          ctx.setLineDash([]);
+          ctx.lineWidth = 2 * dpr;
+          ctx.strokeStyle = ctx.fillStyle = css('--spine');
+          line(cut, UI[lang].now, bbox.top + bbox.height - 6 * dpr);
         }
         ctx.restore();
       };
       plot = new uPlot({
         ...size(),
-        scales: { x: { time: false } },
+        scales: { x: { time: false, ...(until != null && { range: (u, min) => [min, cut] }) } },
         axes: [
           { ...axis, ...(time && { values: (u, vs) => vs.map(hhmm) }) },
           { ...axis, label: c.unit, size: 56 },
@@ -240,7 +253,7 @@
           ...c.series.map((s, i) => ({ label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: true })),
         ],
         hooks: { draw: [marks] },
-      }, [xs, ...c.series.map(s => s.values)], box);
+      }, [xs.slice(0, n), ...c.series.map(s => s.values.slice(0, n))], box);
       onresize = () => plot.setSize(size());
     };
     render();
