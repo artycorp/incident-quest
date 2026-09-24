@@ -78,15 +78,19 @@ The chat is about load testing, so the root cause must be a capacity or performa
 
 Rules:
 
-- **Spine.** 3–5 steps following the real investigation: first signal → what to look at → hypothesis → root cause → mitigation. Each step has exactly 4 options, exactly one `"correct": true`. The player shuffles options, so list them in any order.
+- **Spine.** 3–5 steps following the real investigation: first signal → what to look at → hypothesis → root cause → mitigation. Each step has 4 options (a *chart step* may have 2–4), exactly one `"correct": true`. The player shuffles options, so list them in any order.
 - **Facts.** Every fact on the spine (times, metrics, component names, numbers) comes from the source. Narrative wrapping (the pager going off at night, the on-call's thoughts) is welcome as long as it adds no facts. Illustrative charts are the one exception, under the rules in *Charts*.
+- **Chart steps.** A step with `"chart": "<id>@<moment>"` draws that chart above its options, cut at the story's moment. Use it when the on-call opens a dashboard: the step asks what the reader sees ("Что видишь?"), and the options range from "all normal" to the specific degradation, so the reader diagnoses from the chart itself. Place it right after the step that decided which dashboard to open, and keep the numbers out of that previous step's `result` — the chart reveals them. The chart's title, series names, and `marks` stay neutral and never name the answer; show limits the way a real dashboard does, as a series (`max`, `limit`), not as a labelled mark.
 - **Dead ends.** A wrong option's `result` is 1–2 sentences: a plausible consequence of that action, written as what *would* happen, and it ends by sending the reader back to the fork. Make wrong options tempting — they are what a competent engineer might try first.
 - **Correct results** explain in 1–3 sentences why this was the right move and what it revealed, leading into the next step.
-- **Intro** sets the scene in 2–4 sentences: the service, the time, the first symptom. The company may be named.
-- **Outro** is "what really happened": the actual root cause, mitigation, and the lesson for load testing (what test or metric would have caught it). 1–3 paragraphs.
+- **Voice: an Agatha Christie mystery.** Each episode is a case for Hercule Poirot. The facts of the incident are the clues; the reader is the detective.
+- **Title** names the mystery, never the mechanism, in the manner of a Christie novel: "Тайна полуночной корзины" / "The Mystery of the Midnight Cart", "Убийство в us-east-1" / "Murder in us-east-1". Test: a reader who sees only the title cannot guess the root cause. Words like pool, threads, retry, limit, GC stay out of it.
+- **Intro** is the case brief in 2–4 short paragraphs: the service, the time, the first symptoms as clues, then one remark in Poirot's voice (*mon ami*, *the little grey cells*, order and method) and the question where to begin. The company may be named. Poirot's remark speaks about symptoms and method only — it never hints at the mechanism.
+- **Outro** opens with the drawing-room reveal in Poirot's voice ("And so, ladies and gentlemen…"), then the facts.
+- **Outro** is "what really happened": after the reveal line, the actual root cause, mitigation, and the lesson for load testing (what test or metric would have caught it). 1–3 paragraphs.
 - **Language.** RU is the primary text, written naturally for Russian-speaking engineers, keeping technical terms in English (`p99`, `thread pool`, `retry storm`). EN is an equal-quality rewrite for LinkedIn, not a literal translation. Paragraphs are separated by a blank line (`\n\n`).
 - **Links.** Any text field may contain `[label](chart:<id>@<moment>)`, which opens chart `<id>` from `charts` on a separate page cut at `<moment>`, or `[label](https://...)` for an external link. These are the only two link forms the player renders.
-- **Step 1 doubles as the Telegram quiz poll**, so its `text.ru` fits in 300 characters and each option's `text.ru` fits in 100 characters.
+- **Step 1 doubles as the Telegram quiz poll**, so it has no chart, 4 options, its `text.ru` fits in 300 characters and each option's `text.ru` fits in 100 characters.
 
 ## Charts
 
@@ -132,7 +136,7 @@ Made up, not from the source — review these values:
 ```markdown
 # Telegram (RU)
 
-<teaser: 2–4 sentences with the hook from the intro, no spoilers>
+<teaser: 2–4 sentences in the same Christie voice — the crime and the clues from the intro, no spoilers>
 
 <base URL>episodes/NNN.html?lang=ru
 

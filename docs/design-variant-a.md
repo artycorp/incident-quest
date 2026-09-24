@@ -46,14 +46,14 @@
   --spine: #18212C; --dead: #C8323A; --right: #0E7C66; --right-bg: #E3F2EE;
   --link: #0E5F9E; --focus: #0E5F9E; --cta: #18212C; --cta-fg: #F1F3F5;
   --ui: "Golos Text", system-ui, sans-serif; --story: "Literata", Georgia, serif;
-  --s1: #18212C; --s2: #0E5F9E; --s3: #0E7C66;
+  --s1: #18212C; --s2: #0E5F9E; --s3: #8A94A3;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #161B22; --fg: #E6E9ED; --muted: #98A2AE; --line: #333C47; --card: #1E252E;
     --spine: #C9D1DA; --dead: #F2777E; --right: #4CC7A6; --right-bg: #173129;
     --link: #7FB8E6; --focus: #7FB8E6; --cta: #E6E9ED; --cta-fg: #161B22;
-    --s1: #E6E9ED; --s2: #7FB8E6; --s3: #4CC7A6;
+    --s1: #E6E9ED; --s2: #7FB8E6; --s3: #98A2AE;
   }
 }
 ```

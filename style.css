@@ -5,7 +5,7 @@
   --spine: #F5B53F; --dead: #FF7A7A; --right: #5ED8B0; --right-bg: #173A3A;
   --link: #F5B53F; --focus: #F5B53F; --cta: #F5B53F; --cta-fg: #12162B;
   --ui: "Onest", system-ui, sans-serif; --story: "Onest", system-ui, sans-serif;
-  --s1: #F5B53F; --s2: #8FA8FF; --s3: #5ED8B0;
+  --s1: #F5B53F; --s2: #8FA8FF; --s3: #B9BED6;
   color-scheme: dark;
 }
 
@@ -78,3 +78,8 @@ button:disabled { cursor: default; }
   background: var(--spine); animation: page 0.9s ease-in-out 3;
 }
 @keyframes page { 50% { opacity: 0.15; } }
+
+.inline-chart { margin: 0.75rem 0 1rem; padding: 0.6rem 0.4rem 0.2rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.inline-chart figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0 0.4rem; font: 500 0.9rem/1.3 var(--ui); }
+.inline-chart .illustrative { margin: 0; padding: 0.1rem 0.5rem; font-size: 0.75rem; }
+.inline-chart .plot { margin: 0.5rem 0 0; min-height: 220px; }

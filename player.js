@@ -2,11 +2,11 @@
   const UI = {
     ru: { step: 'Шаг', next: 'Дальше', reveal: 'Что было на самом деле', source: 'Источник',
           mistakes: n => n ? `Тупиков по пути: ${n}` : 'Ни одного тупика — отличное расследование!',
-          now: 'сейчас', illustrative: 'Иллюстрация: в источнике нет цифр, значения придуманы по описанию в тексте.', back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
+          now: 'сейчас', illustrativeShort: 'иллюстрация', illustrative: 'Иллюстрация: в источнике нет цифр, значения придуманы по описанию в тексте.', back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
           noChart: 'График не найден.' },
     en: { step: 'Step', next: 'Next', reveal: 'What really happened', source: 'Source',
           mistakes: n => n ? `Dead ends on the way: ${n}` : 'No dead ends — great investigation!',
-          now: 'now', illustrative: 'Illustration: the source has no numbers, values are made up from the description.', back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
+          now: 'now', illustrativeShort: 'illustration', illustrative: 'Illustration: the source has no numbers, values are made up from the description.', back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
           noChart: 'Chart not found.' },
   };
   const store = {
@@ -80,10 +80,28 @@
     app.append(bar);
   }
 
+  function inlineChart(ep, ref) {
+    const [id, until] = ref.split('@');
+    const c = ep.charts[id];
+    const fig = el('figure', 'inline-chart');
+    const cap = el('figcaption');
+    const open = el('a', 'chart-link', t(c.title));
+    open.href = `../chart.html?ep=${epId}&id=${id}${until ? `&until=${until}` : ''}&lang=${lang}`;
+    open.target = '_blank';
+    open.rel = 'noopener';
+    cap.append(open);
+    if (c.illustrative) cap.append(el('span', 'illustrative', UI[lang].illustrativeShort));
+    const box = el('div', 'plot');
+    fig.append(cap, box);
+    loadUPlot().then(() => box.isConnected && drawChart(box, c, until, 220));
+    return fig;
+  }
+
   function playEpisode(ep) {
     const state = { step: 0, steps: ep.steps.map(s => ({ order: shuffle(s.options.length), tried: [], solved: false })) };
 
     render = () => {
+      clearPlots();
       app.replaceChildren();
       header(t(ep.title), '../');
       app.append(el('h1', null, t(ep.title)));
@@ -96,6 +114,7 @@
         const box = el('section', 'step');
         box.append(el('h2', null, `${UI[lang].step} ${i + 1}/${ep.steps.length}`));
         paras(t(s.text), box);
+        if (s.chart) box.append(inlineChart(ep, s.chart));
         for (const j of st.solved ? st.tried : st.order) {
           const o = s.options[j], tried = st.tried.includes(j);
           const b = el('button', 'option', t(o.text));
@@ -174,16 +193,104 @@
 
   const toMin = v => typeof v === 'string' ? v.split(':').reduce((h, m) => h * 60 + +m) : v;
   const hhmm = m => [Math.floor(m / 60) % 24, m % 60].map(n => String(n).padStart(2, '0')).join(':');
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  const UPLOT = 'https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot';
+  let uplotReady;
+  const loadUPlot = () => uplotReady ??= new Promise((resolve, reject) => {
+    const link = el('link');
+    link.rel = 'stylesheet';
+    link.href = `${UPLOT}.min.css`;
+    const script = el('script');
+    script.src = `${UPLOT}.iife.min.js`;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.append(link, script);
+  });
+
+  let plots = [];
+  addEventListener('resize', () => {
+    for (const { plot, box } of plots) {
+      if (box.clientWidth !== plot.width) plot.setSize({ width: box.clientWidth, height: plot.height });
+    }
+  });
+  const clearPlots = () => {
+    plots.forEach(({ plot }) => plot.destroy());
+    plots = [];
+  };
+
+  function drawChart(box, c, until, height) {
+    const time = typeof c.x[0] === 'string';
+    const xs = c.x.reduce((acc, v) => {
+      let m = toMin(v);
+      while (time && acc.length && m < acc.at(-1)) m += 1440;
+      return [...acc, m];
+    }, []);
+    const markX = v => toMin(v) + (time && toMin(v) < xs[0] ? 1440 : 0);
+    const cut = until == null ? Infinity : markX(until);
+    const n = xs.filter(x => x <= cut).length;
+    const colors = ['--s1', '--s2', '--s3'].map(css);
+    const axis = { stroke: css('--muted'), grid: { stroke: css('--line'), width: 1 }, ticks: { show: false } };
+    const marks = u => {
+      const { ctx, bbox } = u, dpr = devicePixelRatio;
+      ctx.save();
+      ctx.setLineDash([4 * dpr, 4 * dpr]);
+      ctx.lineWidth = dpr;
+      ctx.strokeStyle = ctx.fillStyle = css('--muted');
+      ctx.font = `${12 * dpr}px ${css('--ui')}`;
+      const line = (x, label, y, left = false) => {
+        x = Math.round(u.valToPos(x, 'x', true));
+        ctx.beginPath();
+        ctx.moveTo(x, bbox.top);
+        ctx.lineTo(x, bbox.top + bbox.height);
+        ctx.stroke();
+        ctx.textAlign = left ? 'right' : 'left';
+        ctx.fillText(label, x + (left ? -6 : 4) * dpr, y);
+      };
+      for (const m of c.marks ?? []) {
+        if (markX(m.x) > cut) continue;
+        const nearRight = u.valToPos(markX(m.x), 'x', true) > bbox.left + bbox.width * 0.65;
+        line(markX(m.x), t(m.label), bbox.top + 14 * dpr, nearRight);
+      }
+      if (until != null) {
+        ctx.setLineDash([]);
+        ctx.lineWidth = 2 * dpr;
+        ctx.strokeStyle = ctx.fillStyle = css('--spine');
+        line(cut, UI[lang].now, bbox.top + bbox.height - 24 * dpr, true);
+      }
+      ctx.restore();
+    };
+    const plot = new uPlot({
+      width: box.clientWidth,
+      height,
+      scales: {
+        x: { time: false, ...(until != null && { range: (u, min) => [min, cut] }) },
+        y: { range: (u, min, max) => [0, Math.max(c.yMax ?? 0, max * 1.1)] },
+      },
+      axes: [
+        { ...axis, ...(time && { values: (u, vs) => vs.map(hhmm) }) },
+        { ...axis, label: c.unit, size: 56 },
+      ],
+      series: [
+        { label: time ? 'time' : t(c.xLabel ?? ''), value: (u, v) => v == null ? '—' : time ? hhmm(v) : v },
+        ...c.series.map((s, i) => ({
+          label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: true,
+          ...(c.illustrative && { dash: [8, 5] }),
+        })),
+      ],
+      hooks: { draw: [marks] },
+    }, [xs.slice(0, n), ...c.series.map(s => s.values.slice(0, n))], box);
+    plots.push({ plot, box });
+  }
 
   async function showChart() {
     const id = params.get('ep');
     const ep = await loadEpisode(id);
     const c = ep?.charts?.[params.get('id')];
-    const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-    let plot;
+    if (c) await loadUPlot();
 
     render = () => {
-      plot?.destroy();
+      clearPlots();
       app.replaceChildren();
       if (!c) {
         header('Incident Quest', `episodes/${id}.html`, UI[lang].toEpisode);
@@ -202,64 +309,7 @@
       a.rel = 'noopener';
       src.append(`${UI[lang].source}: `, a);
       app.append(src);
-
-      const time = typeof c.x[0] === 'string';
-      const xs = c.x.reduce((acc, v) => {
-        let m = toMin(v);
-        while (time && acc.length && m < acc.at(-1)) m += 1440;
-        return [...acc, m];
-      }, []);
-      const markX = v => toMin(v) + (time && toMin(v) < xs[0] ? 1440 : 0);
-      const until = params.get('until');
-      const cut = until == null ? Infinity : markX(until);
-      const n = xs.filter(x => x <= cut).length;
-      const colors = ['--s1', '--s2', '--s3'].map(css);
-      const axis = { stroke: css('--muted'), grid: { stroke: css('--line'), width: 1 }, ticks: { show: false } };
-      const size = () => ({ width: box.clientWidth, height: Math.max(240, Math.min(380, innerHeight * 0.5)) });
-      const marks = u => {
-        const { ctx, bbox } = u, dpr = devicePixelRatio;
-        ctx.save();
-        ctx.setLineDash([4 * dpr, 4 * dpr]);
-        ctx.lineWidth = dpr;
-        ctx.strokeStyle = ctx.fillStyle = css('--muted');
-        ctx.font = `${12 * dpr}px ${css('--ui')}`;
-        const line = (x, label, y, left = false) => {
-          x = Math.round(u.valToPos(x, 'x', true));
-          ctx.beginPath();
-          ctx.moveTo(x, bbox.top);
-          ctx.lineTo(x, bbox.top + bbox.height);
-          ctx.stroke();
-          ctx.textAlign = left ? 'right' : 'left';
-          ctx.fillText(label, x + (left ? -6 : 4) * dpr, y);
-        };
-        for (const m of c.marks ?? []) {
-          if (markX(m.x) <= cut) line(markX(m.x), t(m.label), bbox.top + 14 * dpr);
-        }
-        if (until != null) {
-          ctx.setLineDash([]);
-          ctx.lineWidth = 2 * dpr;
-          ctx.strokeStyle = ctx.fillStyle = css('--spine');
-          line(cut, UI[lang].now, bbox.top + bbox.height - 24 * dpr, true);
-        }
-        ctx.restore();
-      };
-      plot = new uPlot({
-        ...size(),
-        scales: {
-          x: { time: false, ...(until != null && { range: (u, min) => [min, cut] }) },
-          y: { range: (u, min, max) => [0, Math.max(c.yMax ?? 0, max * 1.1)] },
-        },
-        axes: [
-          { ...axis, ...(time && { values: (u, vs) => vs.map(hhmm) }) },
-          { ...axis, label: c.unit, size: 56 },
-        ],
-        series: [
-          { label: time ? 'time' : t(c.xLabel ?? ''), value: (u, v) => v == null ? '—' : time ? hhmm(v) : v },
-          ...c.series.map((s, i) => ({ label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: true, ...(c.illustrative && { dash: [8, 5] }) })),
-        ],
-        hooks: { draw: [marks] },
-      }, [xs.slice(0, n), ...c.series.map(s => s.values.slice(0, n))], box);
-      onresize = () => plot.setSize(size());
+      drawChart(box, c, params.get('until'), Math.max(240, Math.min(380, innerHeight * 0.5)));
     };
     render();
   }
