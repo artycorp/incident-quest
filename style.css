@@ -14,6 +14,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 400 1.05rem/1.6
 h1 { font: 800 2rem/1.12 var(--ui); letter-spacing: -0.02em; margin: 1.4rem 0 1rem; text-wrap: balance; }
 main { max-width: 40rem; margin: 0 auto; padding: 0.75rem 16px 5rem; }
 a { color: var(--link); text-underline-offset: 0.18em; }
+code { font: 0.88em/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 0.1em 0.35em; border-radius: 5px; background: var(--card); border: 1px solid var(--line); overflow-wrap: anywhere; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .bar { display: flex; justify-content: space-between; align-items: center; min-height: 2.5rem; font: 500 0.9rem/1 var(--ui); }
 .bar a { text-decoration: none; }

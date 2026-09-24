@@ -91,7 +91,7 @@ Rules:
 - **Intro** sets the scene in 2–4 sentences: the service, the time, the first symptom. The company may be named.
 - **Outro** is "what really happened": the actual root cause, mitigation, and the lesson for load testing (what test or metric would have caught it). 1–3 paragraphs.
 - **Language.** RU is the primary text, written naturally for Russian-speaking engineers, keeping technical terms in English (`p99`, `thread pool`, `retry storm`). EN is an equal-quality rewrite for LinkedIn, not a literal translation. Paragraphs are separated by a blank line (`\n\n`).
-- **Links.** Any text field may contain `[label](chart:<id>@<moment>)`, which opens chart `<id>` from `charts` on a separate page cut at `<moment>`, `[label](https://...)` for an external link, or `[label](NNN.arch.ru.html)` for a file next to the episode. These are the only link forms the player renders.
+- **Links.** Any text field may contain `[label](chart:<id>@<moment>)`, which opens chart `<id>` from `charts` on a separate page cut at `<moment>`, `[label](https://...)` for an external link, or `[label](NNN.arch.ru.html)` for a file next to the episode. These are the only link forms the player renders. `` `code` `` renders as inline code (regexes, config keys, log lines).
 - **Step 1 doubles as the Telegram quiz poll**, so it has no chart, 4 options, its `text.ru` fits in 300 characters and each option's `text.ru` fits in 100 characters.
 
 ## Service diagram
