@@ -51,8 +51,8 @@ The chat is about load testing, so the root cause must be a capacity or performa
     {
       "text": { "ru": "...", "en": "..." },
       "options": [
-        { "text": { "ru": "...", "en": "..." }, "correct": true,  "result": { "ru": "...", "en": "..." } },
-        { "text": { "ru": "...", "en": "..." }, "correct": false, "result": { "ru": "...", "en": "..." } },
+        { "text": { "ru": "...", "en": "..." }, "correct": true,  "result": { "ru": "...", "en": "..." }, "chart": "p99@00:07" },
+        { "text": { "ru": "...", "en": "..." }, "correct": false, "result": { "ru": "...", "en": "..." }, "chart": "restart" },
         { "text": { "ru": "...", "en": "..." }, "correct": false, "result": { "ru": "...", "en": "..." } },
         { "text": { "ru": "...", "en": "..." }, "correct": false, "result": { "ru": "...", "en": "..." } }
       ]
@@ -83,18 +83,17 @@ Rules:
 - **Chart steps.** A step with `"chart": "<id>@<moment>"` draws that chart above its options, cut at the story's moment. Use it when the on-call opens a dashboard: the step asks what the reader sees ("Что видишь?"), and the options range from "all normal" to the specific degradation, so the reader diagnoses from the chart itself. Place it right after the step that decided which dashboard to open, and keep the numbers out of that previous step's `result` — the chart reveals them. The chart's title, series names, and `marks` stay neutral and never name the answer; show limits the way a real dashboard does, as a series (`max`, `limit`), not as a labelled mark.
 - **Dead ends.** A wrong option's `result` is 1–2 sentences: a plausible consequence of that action, written as what *would* happen, and it ends by sending the reader back to the fork. Make wrong options tempting — they are what a competent engineer might try first.
 - **Correct results** explain in 1–3 sentences why this was the right move and what it revealed, leading into the next step.
-- **Voice: an Agatha Christie mystery.** Each episode is a case for Hercule Poirot. The facts of the incident are the clues; the reader is the detective.
-- **Title** names the mystery, never the mechanism, in the manner of a Christie novel: "Тайна полуночной корзины" / "The Mystery of the Midnight Cart", "Убийство в us-east-1" / "Murder in us-east-1". Test: a reader who sees only the title cannot guess the root cause. Words like pool, threads, retry, limit, GC stay out of it.
-- **Intro** is the case brief in 2–4 short paragraphs: the service, the time, the first symptoms as clues, then one remark in Poirot's voice (*mon ami*, *the little grey cells*, order and method) and the question where to begin. The company may be named. Poirot's remark speaks about symptoms and method only — it never hints at the mechanism.
-- **Outro** opens with the drawing-room reveal in Poirot's voice ("And so, ladies and gentlemen…"), then the facts.
-- **Outro** is "what really happened": after the reveal line, the actual root cause, mitigation, and the lesson for load testing (what test or metric would have caught it). 1–3 paragraphs.
+- **Result charts.** Every option — correct and wrong — has `"chart": "<id>@<moment>"` (or `"<id>"` for a what-would-happen chart), drawn under its `result` so the reader sees the consequence. A correct result shows the evidence it revealed, cut at the story's moment. A wrong result shows what that action would have done — invented, so its chart is always illustrative and its `note` says so; when the action changes nothing, show the metric that proves it (CPU idle, GC pauses flat, queries fast).
+- **Title** names the mystery, never the mechanism, in the manner of an Agatha Christie novel: "Тайна полуночной корзины" / "The Mystery of the Midnight Cart", "Убийство в us-east-1" / "Murder in us-east-1". Test: a reader who sees only the title cannot guess the root cause. Words like pool, threads, retry, limit, GC stay out of it. The Christie style is for the title only; the rest of the text is plain and factual.
+- **Intro** sets the scene in 2–4 sentences: the service, the time, the first symptom. The company may be named.
+- **Outro** is "what really happened": the actual root cause, mitigation, and the lesson for load testing (what test or metric would have caught it). 1–3 paragraphs.
 - **Language.** RU is the primary text, written naturally for Russian-speaking engineers, keeping technical terms in English (`p99`, `thread pool`, `retry storm`). EN is an equal-quality rewrite for LinkedIn, not a literal translation. Paragraphs are separated by a blank line (`\n\n`).
 - **Links.** Any text field may contain `[label](chart:<id>@<moment>)`, which opens chart `<id>` from `charts` on a separate page cut at `<moment>`, or `[label](https://...)` for an external link. These are the only two link forms the player renders.
 - **Step 1 doubles as the Telegram quiz poll**, so it has no chart, 4 options, its `text.ru` fits in 300 characters and each option's `text.ru` fits in 100 characters.
 
 ## Charts
 
-Charts are optional. Add one where the source gives numbers a reader would want to see as a shape: latency before and after, a limit being hit, a recovery curve. Link it from the text at the moment the reader needs it (the intro's first symptom, or the `result` that reveals the metric).
+Every option result has a chart (see *Result charts*); charts in the text are optional. Add one where the source gives numbers a reader would want to see as a shape: latency before and after, a limit being hit, a recovery curve. Link it from the text at the moment the reader needs it (the intro's first symptom, or the `result` that reveals the metric).
 
 **The chart shows only what the on-call knows at that moment of the story.** Every chart link in `intro` and `steps` carries the story's current moment: `chart:p99@00:07` when the pager fires, `chart:p99@00:12` in a step that says five minutes have passed. The page draws points up to that moment, marks it with a "now" line, and hides everything after it, so the chart never spoils the next step. One chart can be linked from several steps with a later moment each time. Only `outro` links the uncut chart: `chart:p99`.
 
@@ -118,7 +117,7 @@ Source: <postmortem URL>
 
 ## Illustrative charts
 
-Made up, not from the source — review these values:
+Made up, not from the source — review these values (every wrong-option chart is here):
 
 - `<chart id>` — illustrates "<quoted sentence from the source>"; values: <one-line summary, e.g. "flat ~1200 rps">
 
@@ -136,7 +135,7 @@ Made up, not from the source — review these values:
 ```markdown
 # Telegram (RU)
 
-<teaser: 2–4 sentences in the same Christie voice — the crime and the clues from the intro, no spoilers>
+<teaser: 2–4 sentences with the hook from the intro, no spoilers>
 
 <base URL>episodes/NNN.html?lang=ru
 

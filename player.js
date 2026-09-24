@@ -129,6 +129,7 @@
           if (tried) {
             const r = el('div', `result ${o.correct ? 'right' : 'wrong'}`);
             paras(t(o.result), r);
+            if (o.chart) r.append(inlineChart(ep, o.chart));
             box.append(r);
           }
         }
