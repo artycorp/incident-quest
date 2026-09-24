@@ -10,6 +10,7 @@ Each episode is one PR on branch `episode/NNN` containing exactly:
 
 - `episodes/NNN.html` — the playable episode
 - `episodes/NNN.post.md` — copy-paste texts for Telegram and LinkedIn
+- `episodes/NNN.arch.ru.html`, `episodes/NNN.arch.en.html` — the service diagram (see *Service diagram*)
 - `sources.md` — the used incident marked with `NNN`
 
 Steps:
@@ -18,10 +19,11 @@ Steps:
 2. **Pick.** Take the first `todo` incident in `sources.md`. Done when you have one incident whose root cause is load-shaped (see *Load-shaped*).
 3. **Read the source.** Read the full original postmortem. Done when you can list its timeline, the symptoms engineers saw, the root cause, the mitigation, and every number you plan to use, each traceable to a sentence in the source.
 4. **Write `episodes/NNN.html`** following *Episode format*. Done when every step on the spine is backed by the source and every text field has both `ru` and `en`.
-5. **Write `episodes/NNN.post.md`** following *Post format*.
-6. **Mark** the incident in `sources.md` as `NNN`.
-7. **Check.** Open `episodes/NNN.html` via a local static server (`python3 -m http.server`) and play it to the end in both languages. Done when every option responds, every chart link opens a drawn chart, and the reveal shows the source link.
-8. **Open the PR** titled `Episode NNN: <EN title>`, with the body from *PR body*. Leave it unmerged — the maintainer merges on publication day.
+5. **Draw the service diagram** following *Service diagram*.
+6. **Write `episodes/NNN.post.md`** following *Post format*.
+7. **Mark** the incident in `sources.md` as `NNN`.
+8. **Check.** Open `episodes/NNN.html` via a local static server (`python3 -m http.server`) and play it to the end in both languages. Done when every option responds, every chart link opens a drawn chart, and the reveal shows the source link.
+9. **Open the PR** titled `Episode NNN: <EN title>`, with the body from *PR body*. Leave it unmerged — the maintainer merges on publication day.
 
 ## Load-shaped
 
@@ -89,8 +91,16 @@ Rules:
 - **Intro** sets the scene in 2–4 sentences: the service, the time, the first symptom. The company may be named.
 - **Outro** is "what really happened": the actual root cause, mitigation, and the lesson for load testing (what test or metric would have caught it). 1–3 paragraphs.
 - **Language.** RU is the primary text, written naturally for Russian-speaking engineers, keeping technical terms in English (`p99`, `thread pool`, `retry storm`). EN is an equal-quality rewrite for LinkedIn, not a literal translation. Paragraphs are separated by a blank line (`\n\n`).
-- **Links.** Any text field may contain `[label](chart:<id>@<moment>)`, which opens chart `<id>` from `charts` on a separate page cut at `<moment>`, or `[label](https://...)` for an external link. These are the only two link forms the player renders.
+- **Links.** Any text field may contain `[label](chart:<id>@<moment>)`, which opens chart `<id>` from `charts` on a separate page cut at `<moment>`, `[label](https://...)` for an external link, or `[label](NNN.arch.ru.html)` for a file next to the episode. These are the only link forms the player renders.
 - **Step 1 doubles as the Telegram quiz poll**, so it has no chart, 4 options, its `text.ru` fits in 300 characters and each option's `text.ru` fits in 100 characters.
+
+## Service diagram
+
+The intro links a diagram of the incident's infrastructure, drawn with the `archify` skill as an `architecture` diagram, one file per language: `[схема сервиса](NNN.arch.ru.html)` in `intro.ru`, `[service diagram](NNN.arch.en.html)` in `intro.en`, right after the sentence that describes the architecture.
+
+- Show only components and relationships the source describes: the request path, the caches and their inputs, the dependent services. Up to 8 components.
+- The diagram is a clue, never the answer: it shows the parts the story needs and leaves out the mechanism (a limit, a per-peer resource, a retry loop).
+- Pass `archify` validation and delivery with `--quality showcase`, 9 of 9 checks and 0 warnings.
 
 ## Charts
 

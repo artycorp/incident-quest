@@ -27,7 +27,7 @@
     if (text != null) e.textContent = text;
     return e;
   };
-  const LINK = /\[([^\]]+)\]\((chart:[\w-]+(?:@[\d:.]+)?|https:\/\/[^)\s]+)\)/g;
+  const LINK = /\[([^\]]+)\]\((chart:[\w-]+(?:@[\d:.]+)?|https:\/\/[^)\s]+|[\w.-]+\.html)\)/g;
   const epId = location.pathname.match(/([\w-]+)\.html$/)?.[1];
   const rich = (text, parent) => {
     let i = 0;
