@@ -19,8 +19,8 @@
     "url": "https://aws.amazon.com/message/11201/"
   },
   "intro": {
-    "ru": "25 ноября 2020 года, AWS, регион us-east-1. На Kinesis Data Streams опираются другие сервисы AWS: Cognito, CloudWatch, EventBridge.\n\nЗапросы принимает front-end fleet из многих тысяч серверов. Он проверяет доступ, применяет throttling и направляет запросы в нужные шарды на back-end кластерах. Для маршрутизации каждый front-end сервер держит кеш shard-map.\n\n05:15 PST. Срабатывают первые алармы ([график ошибок](chart:errors@05:15)). Ты дежурный.",
-    "en": "November 25, 2020, AWS, us-east-1. Kinesis Data Streams sits underneath other AWS services: Cognito, CloudWatch, EventBridge.\n\nRequests arrive at a front-end fleet of many thousands of servers. It handles authentication, throttling and routing to the right stream shards on the back-end clusters. To route, every front-end server keeps a cache called the shard-map.\n\n5:15 AM PST. The first alarms fire ([error chart](chart:errors@05:15)). You are on call."
+    "ru": "25 ноября 2020 года, AWS, регион us-east-1. На Kinesis Data Streams опираются другие сервисы AWS: Cognito, CloudWatch, EventBridge.\n\nЗапросы принимает front-end fleet из многих тысяч серверов. Он проверяет доступ, применяет throttling и направляет запросы в нужные шарды на back-end кластерах. Для маршрутизации каждый front-end сервер держит кеш shard-map ([схема сервиса](001.arch.ru.html)).\n\n05:15 PST. Срабатывают первые алармы ([график ошибок](chart:errors@05:15)). Ты дежурный.",
+    "en": "November 25, 2020, AWS, us-east-1. Kinesis Data Streams sits underneath other AWS services: Cognito, CloudWatch, EventBridge.\n\nRequests arrive at a front-end fleet of many thousands of servers. It handles authentication, throttling and routing to the right stream shards on the back-end clusters. To route, every front-end server keeps a cache called the shard-map ([service diagram](001.arch.en.html)).\n\n5:15 AM PST. The first alarms fire ([error chart](chart:errors@05:15)). You are on call."
   },
   "steps": [
     {
