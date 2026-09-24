@@ -2,11 +2,11 @@
   const UI = {
     ru: { step: 'Шаг', next: 'Дальше', reveal: 'Что было на самом деле', source: 'Источник',
           mistakes: n => n ? `Тупиков по пути: ${n}` : 'Ни одного тупика — отличное расследование!',
-          now: 'сейчас', back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
+          now: 'сейчас', illustrative: 'Иллюстрация: в источнике нет цифр, значения придуманы по описанию в тексте.', back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
           noChart: 'График не найден.' },
     en: { step: 'Step', next: 'Next', reveal: 'What really happened', source: 'Source',
           mistakes: n => n ? `Dead ends on the way: ${n}` : 'No dead ends — great investigation!',
-          now: 'now', back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
+          now: 'now', illustrative: 'Illustration: the source has no numbers, values are made up from the description.', back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
           noChart: 'Chart not found.' },
   };
   const store = {
@@ -192,6 +192,7 @@
       }
       header(t(c.title), `episodes/${id}.html`, UI[lang].toEpisode);
       app.append(el('h1', 'chart-title', t(c.title)));
+      if (c.illustrative) app.append(el('p', 'illustrative', UI[lang].illustrative));
       const box = el('div', 'plot');
       app.append(box);
       if (c.note) paras(t(c.note), app);
@@ -222,13 +223,14 @@
         ctx.lineWidth = dpr;
         ctx.strokeStyle = ctx.fillStyle = css('--muted');
         ctx.font = `${12 * dpr}px ${css('--ui')}`;
-        const line = (x, label, y) => {
+        const line = (x, label, y, left = false) => {
           x = Math.round(u.valToPos(x, 'x', true));
           ctx.beginPath();
           ctx.moveTo(x, bbox.top);
           ctx.lineTo(x, bbox.top + bbox.height);
           ctx.stroke();
-          ctx.fillText(label, x + 4 * dpr, y);
+          ctx.textAlign = left ? 'right' : 'left';
+          ctx.fillText(label, x + (left ? -6 : 4) * dpr, y);
         };
         for (const m of c.marks ?? []) {
           if (markX(m.x) <= cut) line(markX(m.x), t(m.label), bbox.top + 14 * dpr);
@@ -237,20 +239,23 @@
           ctx.setLineDash([]);
           ctx.lineWidth = 2 * dpr;
           ctx.strokeStyle = ctx.fillStyle = css('--spine');
-          line(cut, UI[lang].now, bbox.top + bbox.height - 6 * dpr);
+          line(cut, UI[lang].now, bbox.top + bbox.height - 24 * dpr, true);
         }
         ctx.restore();
       };
       plot = new uPlot({
         ...size(),
-        scales: { x: { time: false, ...(until != null && { range: (u, min) => [min, cut] }) } },
+        scales: {
+          x: { time: false, ...(until != null && { range: (u, min) => [min, cut] }) },
+          y: { range: (u, min, max) => [0, Math.max(c.yMax ?? 0, max * 1.1)] },
+        },
         axes: [
           { ...axis, ...(time && { values: (u, vs) => vs.map(hhmm) }) },
           { ...axis, label: c.unit, size: 56 },
         ],
         series: [
           { label: time ? 'time' : t(c.xLabel ?? ''), value: (u, v) => v == null ? '—' : time ? hhmm(v) : v },
-          ...c.series.map((s, i) => ({ label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: true })),
+          ...c.series.map((s, i) => ({ label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: true, ...(c.illustrative && { dash: [8, 5] }) })),
         ],
         hooks: { draw: [marks] },
       }, [xs.slice(0, n), ...c.series.map(s => s.values.slice(0, n))], box);

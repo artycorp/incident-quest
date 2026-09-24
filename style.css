@@ -66,6 +66,7 @@ button:disabled { cursor: default; }
 .plot { margin: 1rem -4px 0.5rem; min-height: 240px; }
 .plot .u-legend { font: 500 0.85rem/1.4 var(--ui); color: var(--fg); text-align: left; }
 .plot .u-legend .u-marker { border-radius: 50%; }
+.illustrative { margin: 0 0 0.5rem; padding: 0.5rem 0.8rem; border: 1.5px dashed var(--spine); border-radius: 10px; font: 500 0.9rem/1.4 var(--ui); }
 .chart-source { font: 400 0.9rem/1.4 var(--ui); color: var(--muted); }
 
 .intro {

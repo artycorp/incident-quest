@@ -21,7 +21,7 @@ Steps:
 5. **Write `episodes/NNN.post.md`** following *Post format*.
 6. **Mark** the incident in `sources.md` as `NNN`.
 7. **Check.** Open `episodes/NNN.html` via a local static server (`python3 -m http.server`) and play it to the end in both languages. Done when every option responds, every chart link opens a drawn chart, and the reveal shows the source link.
-8. **Open the PR** titled `Episode NNN: <EN title>`. Leave it unmerged — the maintainer merges on publication day.
+8. **Open the PR** titled `Episode NNN: <EN title>`, with the body from *PR body*. Leave it unmerged — the maintainer merges on publication day.
 
 ## Load-shaped
 
@@ -79,7 +79,7 @@ The chat is about load testing, so the root cause must be a capacity or performa
 Rules:
 
 - **Spine.** 3–5 steps following the real investigation: first signal → what to look at → hypothesis → root cause → mitigation. Each step has exactly 4 options, exactly one `"correct": true`. The player shuffles options, so list them in any order.
-- **Facts.** Every fact on the spine (times, metrics, component names, numbers) comes from the source. Narrative wrapping (the pager going off at night, the on-call's thoughts) is welcome as long as it adds no facts.
+- **Facts.** Every fact on the spine (times, metrics, component names, numbers) comes from the source. Narrative wrapping (the pager going off at night, the on-call's thoughts) is welcome as long as it adds no facts. Illustrative charts are the one exception, under the rules in *Charts*.
 - **Dead ends.** A wrong option's `result` is 1–2 sentences: a plausible consequence of that action, written as what *would* happen, and it ends by sending the reader back to the fork. Make wrong options tempting — they are what a competent engineer might try first.
 - **Correct results** explain in 1–3 sentences why this was the right move and what it revealed, leading into the next step.
 - **Intro** sets the scene in 2–4 sentences: the service, the time, the first symptom. The company may be named.
@@ -94,13 +94,36 @@ Charts are optional. Add one where the source gives numbers a reader would want 
 
 **The chart shows only what the on-call knows at that moment of the story.** Every chart link in `intro` and `steps` carries the story's current moment: `chart:p99@00:07` when the pager fires, `chart:p99@00:12` in a step that says five minutes have passed. The page draws points up to that moment, marks it with a "now" line, and hides everything after it, so the chart never spoils the next step. One chart can be linked from several steps with a later moment each time. Only `outro` links the uncut chart: `chart:p99`.
 
-- `x` contains a point at every moment a link cuts at, so the "now" line always lands on data.
+There are two kinds of charts:
 
-- **Data comes from the source.** Every point in `values` and every `marks` time is a number or timestamp stated in the postmortem. Where the source gives only a few numbers, plot only those points; the line between them is the honest shape.
-- `note` says what the chart is drawn from, e.g. "Points from the numbers in the AWS summary; times are PST."
+- **Sourced.** Every point in `values` and every `marks` time is a number or timestamp stated in the postmortem. Where the source gives only a few numbers, plot only those points; the line between them is the honest shape. `note` says what it is drawn from, e.g. "Points from the numbers in the AWS summary; times are PST."
+- **Illustrative.** The story states a signal in words without numbers ("traffic was normal", "almost no 5xx", "CPU looked fine"). Draw it as an illustration: set `"illustrative": true`, invent values that match the words and agree with every sourced number, and write in `note` which sentence of the source it illustrates. The page draws illustrative charts with dashed lines under an "Illustration" banner. Add one for each such signal the on-call would check on a dashboard — readers learn most from seeing what looked normal.
+
+Format:
+
+- `x` contains a point at every moment a link cuts at, so the "now" line always lands on data.
 - `x` is either `"HH:MM"` strings (crossing midnight is handled) or plain numbers with an `xLabel` (`{ "ru", "en" }`). All series share the same `x`; use `null` for a missing value.
+- The y axis starts at 0. Set `yMax` when auto-scaling would exaggerate a small signal: "almost no 5xx" at 0.05–0.1 % gets `"yMax": 5` so it reads as near zero, not as a spike.
 - `marks` are vertical event lines (deploy, page, mitigation) with a short label.
 - Up to 3 series per chart. Check each chart via `chart.html?ep=NNN&id=<id>` during the *Check* step.
+
+## PR body
+
+```markdown
+Source: <postmortem URL>
+
+## Illustrative charts
+
+Made up, not from the source — review these values:
+
+- `<chart id>` — illustrates "<quoted sentence from the source>"; values: <one-line summary, e.g. "flat ~1200 rps">
+
+(or "None — every chart is sourced.")
+
+## Sourced charts
+
+- `<chart id>` — <which numbers from the source>
+```
 
 ## Post format
 
