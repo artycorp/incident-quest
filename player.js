@@ -2,10 +2,12 @@
   const UI = {
     ru: { step: 'Шаг', next: 'Дальше', reveal: 'Что было на самом деле', source: 'Источник',
           mistakes: n => n ? `Тупиков по пути: ${n}` : 'Ни одного тупика — отличное расследование!',
-          back: '← Все выпуски', empty: 'Выпусков пока нет.' },
+          back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
+          noChart: 'График не найден.' },
     en: { step: 'Step', next: 'Next', reveal: 'What really happened', source: 'Source',
           mistakes: n => n ? `Dead ends on the way: ${n}` : 'No dead ends — great investigation!',
-          back: '← All episodes', empty: 'No episodes yet.' },
+          back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
+          noChart: 'Chart not found.' },
   };
   const store = {
     get: k => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -23,17 +25,43 @@
     if (text != null) e.textContent = text;
     return e;
   };
-  const paras = (text, parent) => text.split(/\n\s*\n/).forEach(p => parent.append(el('p', null, p.trim())));
+  const LINK = /\[([^\]]+)\]\((chart:[\w-]+|https:\/\/[^)\s]+)\)/g;
+  const epId = location.pathname.match(/([\w-]+)\.html$/)?.[1];
+  const rich = (text, parent) => {
+    let i = 0;
+    for (const m of text.matchAll(LINK)) {
+      parent.append(text.slice(i, m.index));
+      const chart = m[2].startsWith('chart:');
+      const a = el('a', chart ? 'chart-link' : null, m[1]);
+      a.href = chart ? `../chart.html?ep=${epId}&id=${m[2].slice(6)}&lang=${lang}` : m[2];
+      a.target = '_blank';
+      a.rel = 'noopener';
+      parent.append(a);
+      i = m.index + m[0].length;
+    }
+    parent.append(text.slice(i));
+  };
+  const paras = (text, parent) => text.split(/\n\s*\n/).forEach(p => {
+    const e = el('p');
+    rich(p.trim(), e);
+    parent.append(e);
+  });
+  const loadEpisode = async id => {
+    const res = await fetch(`episodes/${id}.html`);
+    if (!res.ok) return null;
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    return JSON.parse(doc.getElementById('episode').textContent);
+  };
   const shuffle = n => [...Array(n).keys()].sort(() => Math.random() - 0.5);
 
   let render;
 
-  function header(title, backHref) {
+  function header(title, backHref, backLabel = UI[lang].back) {
     document.title = title;
     document.documentElement.lang = lang;
     const bar = el('nav', 'bar');
     if (backHref) {
-      const a = el('a', null, UI[lang].back);
+      const a = el('a', null, backLabel);
       a.href = `${backHref}?lang=${lang}`;
       bar.append(a);
     } else {
@@ -43,7 +71,8 @@
     toggle.onclick = () => {
       lang = lang === 'ru' ? 'en' : 'ru';
       store.set('lang', lang);
-      history.replaceState(null, '', `?lang=${lang}`);
+      params.set('lang', lang);
+      history.replaceState(null, '', `?${params}`);
       render();
     };
     bar.append(toggle);
@@ -57,31 +86,31 @@
       app.replaceChildren();
       header(t(ep.title), '../');
       app.append(el('h1', null, t(ep.title)));
-      paras(t(ep.intro), app);
+      const intro = el('section', 'intro');
+      paras(t(ep.intro), intro);
+      app.append(intro);
 
       for (let i = 0; i <= Math.min(state.step, ep.steps.length - 1); i++) {
         const s = ep.steps[i], st = state.steps[i];
         const box = el('section', 'step');
         box.append(el('h2', null, `${UI[lang].step} ${i + 1}/${ep.steps.length}`));
         paras(t(s.text), box);
-        for (const j of st.order) {
-          const o = s.options[j];
+        for (const j of st.solved ? st.tried : st.order) {
+          const o = s.options[j], tried = st.tried.includes(j);
           const b = el('button', 'option', t(o.text));
-          b.disabled = st.solved || st.tried.includes(j);
-          if (st.tried.includes(j)) b.classList.add(o.correct ? 'right' : 'wrong');
+          b.disabled = st.solved || tried;
+          if (tried) b.classList.add(o.correct ? 'right' : 'wrong');
           b.onclick = () => {
             st.tried.push(j);
             st.solved = !!o.correct;
             render();
           };
           box.append(b);
-        }
-        const last = st.tried.at(-1);
-        if (last != null) {
-          const o = s.options[last];
-          const r = el('div', `result ${o.correct ? 'right' : 'wrong'}`);
-          paras(t(o.result), r);
-          box.append(r);
+          if (tried) {
+            const r = el('div', `result ${o.correct ? 'right' : 'wrong'}`);
+            paras(t(o.result), r);
+            box.append(r);
+          }
         }
         if (st.solved && i === state.step) {
           const isLast = i === ep.steps.length - 1;
@@ -118,10 +147,9 @@
     const episodes = [];
     for (let n = 1; ; n++) {
       const id = String(n).padStart(3, '0');
-      const res = await fetch(`episodes/${id}.html`);
-      if (!res.ok) break;
-      const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-      episodes.push({ id, ...JSON.parse(doc.getElementById('episode').textContent) });
+      const ep = await loadEpisode(id);
+      if (!ep) break;
+      episodes.push({ id, ...ep });
     }
     episodes.reverse();
 
@@ -143,7 +171,82 @@
     render();
   }
 
-  const data = document.getElementById('episode');
-  if (data) playEpisode(JSON.parse(data.textContent));
+  const toMin = v => typeof v === 'string' ? v.split(':').reduce((h, m) => h * 60 + +m) : v;
+  const hhmm = m => [Math.floor(m / 60) % 24, m % 60].map(n => String(n).padStart(2, '0')).join(':');
+
+  async function showChart() {
+    const id = params.get('ep');
+    const ep = await loadEpisode(id);
+    const c = ep?.charts?.[params.get('id')];
+    const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    let plot;
+
+    render = () => {
+      plot?.destroy();
+      app.replaceChildren();
+      if (!c) {
+        header('Incident Quest', `episodes/${id}.html`, UI[lang].toEpisode);
+        app.append(el('p', null, UI[lang].noChart));
+        return;
+      }
+      header(t(c.title), `episodes/${id}.html`, UI[lang].toEpisode);
+      app.append(el('h1', 'chart-title', t(c.title)));
+      const box = el('div', 'plot');
+      app.append(box);
+      if (c.note) paras(t(c.note), app);
+      const src = el('p', 'chart-source');
+      const a = el('a', null, ep.source.title);
+      a.href = ep.source.url;
+      a.rel = 'noopener';
+      src.append(`${UI[lang].source}: `, a);
+      app.append(src);
+
+      const time = typeof c.x[0] === 'string';
+      const xs = c.x.reduce((acc, v) => {
+        let m = toMin(v);
+        while (time && acc.length && m < acc.at(-1)) m += 1440;
+        return [...acc, m];
+      }, []);
+      const markX = v => toMin(v) + (time && toMin(v) < xs[0] ? 1440 : 0);
+      const colors = ['--s1', '--s2', '--s3'].map(css);
+      const axis = { stroke: css('--muted'), grid: { stroke: css('--line'), width: 1 }, ticks: { show: false } };
+      const size = () => ({ width: box.clientWidth, height: Math.max(240, Math.min(380, innerHeight * 0.5)) });
+      const marks = u => {
+        const { ctx, bbox } = u, dpr = devicePixelRatio;
+        ctx.save();
+        ctx.setLineDash([4 * dpr, 4 * dpr]);
+        ctx.lineWidth = dpr;
+        ctx.strokeStyle = ctx.fillStyle = css('--muted');
+        ctx.font = `${12 * dpr}px ${css('--ui')}`;
+        for (const m of c.marks ?? []) {
+          const x = Math.round(u.valToPos(markX(m.x), 'x', true));
+          ctx.beginPath();
+          ctx.moveTo(x, bbox.top);
+          ctx.lineTo(x, bbox.top + bbox.height);
+          ctx.stroke();
+          ctx.fillText(t(m.label), x + 4 * dpr, bbox.top + 14 * dpr);
+        }
+        ctx.restore();
+      };
+      plot = new uPlot({
+        ...size(),
+        scales: { x: { time: false } },
+        axes: [
+          { ...axis, ...(time && { values: (u, vs) => vs.map(hhmm) }) },
+          { ...axis, label: c.unit, size: 56 },
+        ],
+        series: [
+          { label: time ? 'time' : t(c.xLabel ?? ''), value: (u, v) => v == null ? '—' : time ? hhmm(v) : v },
+          ...c.series.map((s, i) => ({ label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: true })),
+        ],
+        hooks: { draw: [marks] },
+      }, [xs, ...c.series.map(s => s.values)], box);
+      onresize = () => plot.setSize(size());
+    };
+    render();
+  }
+
+  if (document.body.dataset.page === 'chart') showChart();
+  else if (document.getElementById('episode')) playEpisode(JSON.parse(document.getElementById('episode').textContent));
   else listEpisodes();
 })();
