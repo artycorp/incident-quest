@@ -30,8 +30,7 @@
     s.dataset.domains = 'artycorp.github.io';
     document.head.append(s);
   }
-  const episodeNo = location.pathname.match(/(\d{3})\.html$/)?.[1];
-  const track = (name, data) => window.umami?.track(name, { episode: episodeNo, lang, ...data });
+  const track = (name, data) => window.umami?.track(name, { episode: epId, lang, ...data });
 
   const app = document.getElementById('app');
   const t = v => typeof v === 'string' ? v : (v[lang] ?? v.en);
