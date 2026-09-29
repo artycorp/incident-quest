@@ -4,7 +4,7 @@ Judgement rules for review. `scripts/check-episodes.py` covers the mechanical on
 
 ## Episodes
 
-- **Spoilers.** Everything visible before the reveal shows only what the on-call knows at that moment: step text, results, chart titles, series names, marks, legend values, and anything a cut chart page (`@moment`) renders. The source title and link, `note`, and the uncut chart belong to the reveal.
+- **Spoilers.** Everything visible before the reveal shows only what the on-call knows at that moment: step text, results, chart titles, series names, marks, legend values, and anything a chart page renders (any chart page opens mid-game from a panel title). The source title and link appear only in the reveal; `note` only on uncut chart pages, so it explains the chart without naming the root cause.
 - **Hints.** A hint points where to look using facts already on the page, and leaves the conclusion to the reader. Read it next to the correct option: if the hint alone picks that option, rewrite it.
 - **Chart realism.** Each series moves the way the real metric would: cliffs for state flips, sharp edges at alarms, gradual lines for rollouts and recoveries. Illustrative charts agree with each other and with every sourced number (threads track the fleet size, errors track the servers that fail).
 - **Facts.** Every time, number and component name on the spine traces to a sentence in the source; narrative wrapping adds no new facts.
