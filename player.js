@@ -357,6 +357,25 @@
       }
       ctx.restore();
     };
+    const tip = el('div', 'tooltip');
+    tip.hidden = true;
+    const tooltip = u => {
+      const i = u.cursor.idx;
+      tip.hidden = i == null;
+      if (tip.hidden) return;
+      const x = u.data[0][i];
+      tip.replaceChildren(el('b', null, time ? hhmm(x) : `${x}${c.xLabel ? ` ${t(c.xLabel)}` : ''}`));
+      c.series.forEach((s, k) => {
+        const row = el('div');
+        const swatch = el('i');
+        swatch.style.background = u.series[k + 1].stroke();
+        row.append(swatch, `${t(s.name)} `, el('span', null, fmt(u.data[k + 1][i], tickUnit)));
+        tip.append(row);
+      });
+      const { left, top } = u.cursor, w = tip.offsetWidth, h = tip.offsetHeight;
+      tip.style.left = `${left + 12 + w > u.over.clientWidth ? Math.max(0, left - 12 - w) : left + 12}px`;
+      tip.style.top = `${Math.max(0, Math.min(top + 12, u.over.clientHeight - h))}px`;
+    };
     const plot = new uPlot({
       width: box.clientWidth,
       height,
@@ -377,9 +396,15 @@
           ...(threshold && s.threshold && { stroke: css('--threshold'), dash: [10, 6] }),
         })),
       ],
-      hooks: { draw: [marks] },
+      hooks: { draw: [marks], setCursor: [tooltip], ready: [u => u.over.append(tip)] },
     }, [xs.slice(0, n), ...c.series.map(s => s.values.slice(0, n))], box);
     plots.push({ plot, box });
+    const touch = e => {
+      const r = plot.over.getBoundingClientRect(), p = e.touches[0];
+      plot.setCursor({ left: p.clientX - r.left, top: p.clientY - r.top });
+    };
+    plot.over.addEventListener('touchstart', touch, { passive: true });
+    plot.over.addEventListener('touchmove', touch, { passive: true });
 
     const legend = el('table', 'legend');
     const head = el('tr');
