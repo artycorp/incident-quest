@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&family=Inter:wght@400;500&family=JetBrains+Mono:wght@600&display=swap");
 
 :root {
   --bg: #12162B; --fg: #E4E6F0; --muted: #8C92B3; --line: #2C3254; --card: #191E38;
@@ -67,11 +67,6 @@ button:disabled { cursor: default; }
 
 .chart-link { text-decoration-style: dotted; text-decoration-thickness: 1.5px; }
 .chart-link::after { content: "\00a0↗"; font-size: 0.8em; }
-.chart-title { font-size: 1.5rem; }
-.plot { margin: 1rem -4px 0.5rem; min-height: 240px; }
-.plot .u-legend { font: 500 0.85rem/1.4 var(--ui); color: var(--fg); text-align: left; }
-.plot .u-legend .u-marker { border-radius: 50%; }
-.illustrative { margin: 0 0 0.5rem; padding: 0.5rem 0.8rem; border: 1.5px dashed var(--spine); border-radius: 10px; font: 500 0.9rem/1.4 var(--ui); }
 .chart-source { font: 400 0.9rem/1.4 var(--ui); color: var(--muted); }
 
 .intro {
@@ -84,9 +79,30 @@ button:disabled { cursor: default; }
 }
 @keyframes page { 50% { opacity: 0.15; } }
 
-.inline-chart { margin: 0.75rem 0 1rem; padding: 0.6rem 0.4rem 0.2rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
-.inline-chart figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0 0.4rem; font: 500 0.9rem/1.3 var(--ui); }
-.inline-chart .illustrative { margin: 0; padding: 0.1rem 0.5rem; font-size: 0.75rem; }
-.inline-chart .plot { margin: 0.5rem 0 0; min-height: 220px; }
+.panel {
+  --bg: #111217; --card: #181b1f; --fg: #ccccdc; --muted: #8e8e9c; --line: #2a2d33; --spine: #FF9830;
+  --s1: #73BF69; --s2: #FADE2A; --s3: #5794F2; --threshold: #F2495C; --ui: "Inter", system-ui, sans-serif;
+  margin: 0.75rem 0 1rem; padding: 0 0.5rem 0.5rem; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 4px; font: 400 0.8rem/1.3 var(--ui);
+}
+.dash-bar { display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0; color: var(--muted); }
+.crumbs { flex: 1; min-width: 5.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.crumbs b { color: var(--fg); font-weight: 500; }
+.picker, .refresh { padding: 0.25rem 0.5rem; border: 1px solid var(--line); border-radius: 2px; background: var(--card); white-space: nowrap; }
+.panel-card { background: var(--card); border: 1px solid var(--line); border-radius: 2px; padding: 0.4rem 0.3rem 0.2rem; }
+.panel figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0 0.3rem; font-weight: 500; }
+.panel .chart-link { color: var(--fg); }
+.panel .illustrative { padding: 0 0.4rem; border: 1px dashed var(--s2); border-radius: 2px; color: var(--s2); font-size: 0.7rem; cursor: help; }
+.panel .plot { margin: 0.4rem 0 0; min-height: 220px; }
+.legend { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.legend th { color: var(--s3); font-weight: 500; }
+.legend th, .legend td { padding: 0.15rem 0.4rem; text-align: right; }
+.legend td:first-child { text-align: left; }
+.legend i { display: inline-block; width: 14px; height: 4px; margin-right: 0.4rem; border-radius: 1px; vertical-align: middle; }
+.hint-btn { margin: 0.3rem 0 0.2rem; padding: 0.45rem 0.9rem; border: 1.5px dashed var(--line); border-radius: 10px; font: 500 0.9rem/1.2 var(--ui); color: var(--muted); }
+.hint-btn:hover { color: var(--fg); border-color: var(--fg); }
+.hint { margin: 0.4rem 0; padding: 0.1rem 0 0.1rem 0.9rem; border-left: 2px solid var(--spine); font-size: 0.97rem; }
+.hint p { margin: 0.35rem 0; }
 .result .option { margin: 0.4rem 0; font-size: 0.95rem; }
 .result .option::before { content: none; }

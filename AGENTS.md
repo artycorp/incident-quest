@@ -22,7 +22,7 @@ Steps:
 5. **Draw the service diagram** following *Service diagram*.
 6. **Write `episodes/NNN.post.md`** following *Post format*.
 7. **Mark** the incident in `sources.md` as `NNN`.
-8. **Check.** Open `episodes/NNN.html` via a local static server (`python3 -m http.server`) and play it to the end in both languages. Done when every option responds, every chart link opens a drawn chart, and the reveal shows the source link.
+8. **Check.** Open `episodes/NNN.html` via a local static server (`python3 -m http.server`) and play it to the end in both languages. Done when every option responds, every chart link opens a drawn chart, every hint button shows its hint (and turns `threshold` series red on that step's charts), and the reveal shows the source link.
 9. **Open the PR** titled `Episode NNN: <EN title>`, with the body from *PR body*. Leave it unmerged — the maintainer merges on publication day.
 
 ## Load-shaped
@@ -47,11 +47,13 @@ The chat is about load testing, so the root cause must be a capacity or performa
   <script type="application/json" id="episode">
 {
   "title": { "ru": "...", "en": "..." },
+  "dashboard": "Kinesis · us-east-1",
   "source": { "title": "AWS: Summary of the ... Event (2020)", "url": "https://..." },
   "intro": { "ru": "...", "en": "..." },
   "steps": [
     {
       "text": { "ru": "...", "en": "..." },
+      "hint": { "ru": "...", "en": "..." },
       "options": [
         { "text": { "ru": "...", "en": "..." }, "correct": true,  "result": { "ru": "...", "en": "..." }, "chart": "p99@00:07" },
         { "text": { "ru": "...", "en": "..." }, "correct": false, "result": { "ru": "...", "en": "..." }, "chart": "restart", "degraded": true, "miss": { "ru": "...", "en": "..." } },
@@ -66,7 +68,10 @@ The chat is about load testing, so the root cause must be a capacity or performa
       "title": { "ru": "...", "en": "..." },
       "unit": "ms",
       "x": ["23:50", "00:05", "00:40"],
-      "series": [ { "name": { "ru": "p99", "en": "p99" }, "values": [180, 4100, 190] } ],
+      "series": [
+        { "name": { "ru": "p99", "en": "p99" }, "values": [180, 4100, 190] },
+        { "name": { "ru": "таймаут", "en": "timeout" }, "values": [5000, 5000, 5000], "threshold": true }
+      ],
       "marks": [ { "x": "00:07", "label": { "ru": "пейджер", "en": "page" } } ],
       "note": { "ru": "...", "en": "..." }
     }
@@ -82,7 +87,9 @@ Rules:
 
 - **Spine.** 3–5 steps following the real investigation: first signal → what to look at → hypothesis → root cause → mitigation. Each step has 4 options (a *chart step* may have 2–4), exactly one `"correct": true`. The player shuffles options, so list them in any order.
 - **Facts.** Every fact on the spine (times, metrics, component names, numbers) comes from the source. Narrative wrapping (the pager going off at night, the on-call's thoughts) is welcome as long as it adds no facts. Illustrative charts are the one exception, under the rules in *Charts*.
-- **Chart steps.** A step with `"chart": "<id>@<moment>"` draws that chart above its options, cut at the story's moment. Use it when the on-call opens a dashboard: the step asks what the reader sees ("Что видишь?"), and the options range from "all normal" to the specific degradation, so the reader diagnoses from the chart itself. Place it right after the step that decided which dashboard to open, and keep the numbers out of that previous step's `result` — the chart reveals them. The chart's title, series names, and `marks` stay neutral and never name the answer; show limits the way a real dashboard does, as a series (`max`, `limit`), not as a labelled mark.
+- **Chart steps.** A step with `"chart": "<id>@<moment>"` draws that chart above its options, cut at the story's moment. Use it when the on-call opens a dashboard: the step asks what the reader sees ("Что видишь?"), and the options range from "all normal" to the specific degradation, so the reader diagnoses from the chart itself. Place it right after the step that decided which dashboard to open, and keep the numbers out of that previous step's `result` — the chart reveals them. The chart's title, series names, and `marks` stay neutral and never name the answer; show limits the way a real dashboard does, as a series (`max`, `limit`) marked `"threshold": true`, not as a labelled mark.
+- **Dashboard.** Every chart renders as a Grafana panel under a dashboard header. `dashboard` is that header: the service as the source names it (`Kinesis · us-east-1`, `Stack Overflow`).
+- **Hints.** A hard step may carry `hint`, which adds a one-use Hint button; chart steps come first, then the hypothesis and root-cause steps. A hint points where to look using only facts already on the page, and leaves the conclusion to the reader. After the hint, `threshold` series on that step's charts turn into a red dashed Grafana threshold, the hint's reward; the uncut `chart.html` always shows them. The reveal counts hints next to dead ends.
 - **Dead ends.** A wrong option's `result` is 1–2 sentences: a plausible consequence of that action, written as what *would* happen, and it ends by sending the reader back to the fork. Make wrong options tempting — they are what a competent engineer might try first.
 - **Correct results** explain in 1–3 sentences why this was the right move and what it revealed, leading into the next step.
 - **Result charts.** Every option — correct and wrong — has `"chart": "<id>@<moment>"` (or `"<id>"` for a what-would-happen chart). A correct option shows its `result`, then the chart with the evidence it revealed, cut at the story's moment.
@@ -111,7 +118,7 @@ Every option result has a chart (see *Result charts*); charts in the text are op
 There are two kinds of charts:
 
 - **Sourced.** Every point in `values` and every `marks` time is a number or timestamp stated in the postmortem. Where the source gives only a few numbers, plot only those points; the line between them is the honest shape. `note` says what it is drawn from, e.g. "Points from the numbers in the AWS summary; times are PST."
-- **Illustrative.** The story states a signal in words without numbers ("traffic was normal", "almost no 5xx", "CPU looked fine"). Draw it as an illustration: set `"illustrative": true`, invent values that match the words and agree with every sourced number, and write in `note` which sentence of the source it illustrates. The page draws illustrative charts with dashed lines under an "Illustration" banner. Add one for each such signal the on-call would check on a dashboard — readers learn most from seeing what looked normal.
+- **Illustrative.** The story states a signal in words without numbers ("traffic was normal", "almost no 5xx", "CPU looked fine"). Draw it as an illustration: set `"illustrative": true`, invent values that match the words and agree with every sourced number, and write in `note` which sentence of the source it illustrates. The page draws illustrative charts with dashed lines with an "Illustration" badge in the panel title. Add one for each such signal the on-call would check on a dashboard — readers learn most from seeing what looked normal.
 
 Format:
 
@@ -137,6 +144,12 @@ Made up, not from the source — review these values (every wrong-option chart i
 ## Sourced charts
 
 - `<chart id>` — <which numbers from the source>
+
+## Hints
+
+- Step <N> — "<hint en>"
+
+(or "None.")
 ```
 
 ## Post format
