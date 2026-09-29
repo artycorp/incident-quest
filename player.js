@@ -19,6 +19,18 @@
   let lang = [params.get('lang'), store.get('lang')].find(l => l in UI)
     || (navigator.language.startsWith('ru') ? 'ru' : 'en');
 
+  const UMAMI_ID = '072ac9f6-92c4-450d-8392-61ddbaa87c21';
+  if (UMAMI_ID) {
+    const s = document.createElement('script');
+    s.defer = true;
+    s.src = 'https://cloud.umami.is/script.js';
+    s.dataset.websiteId = UMAMI_ID;
+    s.dataset.domains = 'artycorp.github.io';
+    document.head.append(s);
+  }
+  const episodeNo = location.pathname.match(/(\d{3})\.html$/)?.[1];
+  const track = (name, data) => window.umami?.track(name, { episode: episodeNo, lang, ...data });
+
   const app = document.getElementById('app');
   const t = v => typeof v === 'string' ? v : (v[lang] ?? v.en);
   const el = (tag, cls, text) => {
@@ -131,6 +143,7 @@
           b.onclick = () => {
             st.tried.push(j);
             st.solved = !!o.correct;
+            track('option', { step: i + 1, option: j + 1, correct: !!o.correct, attempt: st.tried.length });
             render();
           };
           box.append(b);
@@ -146,7 +159,11 @@
               const c = el('button', 'option check', bad ? UI[lang].checkBad : UI[lang].checkOk);
               c.disabled = said !== undefined;
               if (said === bad) c.classList.add(bad === !!o.degraded ? 'right' : 'wrong');
-              c.onclick = () => { st.checks[j] = bad; render(); };
+              c.onclick = () => {
+                st.checks[j] = bad;
+                track('check', { step: i + 1, option: j + 1, correct: bad === !!o.degraded });
+                render();
+              };
               r.append(c);
             }
             if (said !== undefined) paras(t(said === !!o.degraded ? o.result : o.miss), r);
@@ -158,6 +175,7 @@
           const next = el('button', 'next', isLast ? UI[lang].reveal : UI[lang].next);
           next.onclick = () => {
             state.step++;
+            if (isLast) track('finish', { mistakes: state.steps.reduce((n, st) => n + st.tried.length - 1, 0) });
             render();
             app.lastElementChild.scrollIntoView({ behavior: 'smooth' });
           };
