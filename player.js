@@ -384,7 +384,7 @@
         y: { range: (u, min, max) => [0, Math.max(c.yMax ?? 0, max * 1.1)] },
       },
       axes: [
-        { ...axis, ...(time && { values: (u, vs) => vs.map(hhmm) }) },
+        { ...axis, ...(time && { incrs: [1, 2, 5, 10, 15, 30, 60, 120, 180, 240, 360, 720], values: (u, vs) => vs.map(hhmm) }) },
         { ...axis, label: tickUnit ? undefined : unit, size: 56, values: (u, vs) => vs.map(v => fmt(v, tickUnit)) },
       ],
       legend: { show: false },

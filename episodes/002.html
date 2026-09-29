@@ -20,8 +20,8 @@
     "url": "https://web.archive.org/web/20160720200842/https://stackstatus.net/post/147710624694/outage-postmortem-july-20-2016"
   },
   "intro": {
-    "ru": "20 июля 2016 года, Stack Overflow. Запросы пользователей принимает балансировщик и раздаёт их web-серверам. Web-серверы собирают главную страницу со списком постов и все остальные страницы ([схема сервиса](002.arch.ru.html)).\n\n14:44 UTC. Сайт перестаёт открываться целиком ([график доступности](chart:down@14:44)). Ты дежурный.",
-    "en": "July 20, 2016, Stack Overflow. User requests land on a load balancer, which hands them to the web servers. The web servers render the home page with its list of posts, and every other page too ([service diagram](002.arch.en.html)).\n\n14:44 UTC. The whole site stops loading ([availability chart](chart:down@14:44)). You are on call."
+    "ru": "20 июля 2016 года, Stack Overflow. Запросы пользователей принимает балансировщик и раздаёт их web-серверам. Web-серверы собирают главную страницу со списком постов и все остальные страницы ([схема сервиса](002.arch.ru.html)).\n\n14:44 UTC. Сайт перестаёт открываться целиком ([график доступности](chart:down@14:46)). Ты дежурный.",
+    "en": "July 20, 2016, Stack Overflow. User requests land on a load balancer, which hands them to the web servers. The web servers render the home page with its list of posts, and every other page too ([service diagram](002.arch.en.html)).\n\n14:44 UTC. The whole site stops loading ([availability chart](chart:down@14:46)). You are on call."
   },
   "steps": [
     {
@@ -40,7 +40,7 @@
             "en": "Check what the load balancer thinks of the web servers"
           },
           "correct": true,
-          "chart": "rotation@14:44",
+          "chart": "rotation@14:46",
           "result": {
             "ru": "Балансировщик вывел из ротации все web-серверы: они не проходят health check. А health check у балансировщика — это запрос главной страницы. Значит, главная перестала отвечать вовремя. Надо понять, почему.",
             "en": "The load balancer has taken every web server out of rotation: they fail the health check. And the balancer’s health check is a request for the home page. So the home page has stopped responding fast enough. Time to find out why."
@@ -323,6 +323,7 @@
       "x": [
         "14:40",
         "14:44",
+        "14:46",
         "14:48",
         "14:54",
         "15:08",
@@ -337,6 +338,7 @@
           },
           "values": [
             100,
+            0,
             0,
             0,
             0,
@@ -385,6 +387,7 @@
       "x": [
         "14:40",
         "14:44",
+        "14:46",
         "14:48",
         "14:54",
         "15:08",
@@ -399,6 +402,7 @@
           },
           "values": [
             100,
+            0,
             0,
             0,
             0,
