@@ -42,8 +42,8 @@
           "correct": true,
           "chart": "errors@05:15",
           "result": {
-            "ru": "Новая мощность — главный подозреваемый, хотя доказательств нет. Начинаешь убирать её, не дожидаясь доказательств, и ищешь дальше.\n\nДиагностику тормозит пестрота ошибок: они во всех видах вызовов, у старых и новых серверов, и следствия трудно отделить от причины.",
-            "en": "The new capacity is the prime suspect, though there is no proof. You start removing it without waiting for proof and keep looking.\n\nThe variety of errors slows the diagnosis: they show up in every kind of call, on old and new servers alike, and side effects are hard to tell from the cause."
+            "ru": "Главный подозреваемый у тебя новая мощность, хотя доказательств нет. Ты начинаешь её убирать и ищешь дальше.\n\nДиагностику тормозит пестрота ошибок: они во всех видах вызовов, у старых и новых серверов, и следствия трудно отделить от причины.",
+            "en": "The new capacity is the prime suspect, though there is no proof. You start removing it anyway and keep looking.\n\nThe variety of errors slows the diagnosis: they show up in every kind of call, on old and new servers alike, and side effects are hard to tell from the cause."
           }
         },
         {
@@ -89,8 +89,8 @@
           "chart": "morecap",
           "degraded": true,
           "result": {
-            "ru": "Ошибок становится больше, а не меньше. Лишние серверы fleet не лечат. Вернись к развилке.",
-            "en": "Errors go up, not down. Extra servers do not heal this fleet. Back to the fork."
+            "ru": "Ошибок становится больше: лишние серверы этот fleet не лечат. Вернись к развилке.",
+            "en": "Errors go up: extra servers do not heal this fleet. Back to the fork."
           },
           "miss": {
             "ru": "Посмотри ещё раз: после новых серверов ошибок стало больше. Вернись к развилке.",
@@ -105,8 +105,8 @@
         "en": "The fix takes hours and touches the whole fleet. What happens if the theory turns out wrong?"
       },
       "text": {
-        "ru": "07:51. Круг подозреваемых сузился до пары кандидатов. Главный — что-то, что создаёт давление на память. Любой фикс требует поменять конфигурацию каждого front-end сервера и перезапустить весь fleet из многих тысяч серверов, а это долгий и аккуратный процесс. Что делаешь?",
-        "en": "7:51 AM. The suspects are down to a couple of candidates. The leading one is something that seems to create memory pressure. Any fix means changing the configuration of every front-end server and restarting the whole fleet of many thousands of servers, a long and careful process. What do you do?"
+        "ru": "07:51. Подозреваемых осталось двое, и скорее всего что-то давит на память. Любой фикс требует поменять конфигурацию каждого front-end сервера и перезапустить весь fleet из многих тысяч серверов, а это долгий и аккуратный процесс. Что делаешь?",
+        "en": "7:51 AM. The suspects are down to a couple of candidates, and the likeliest seems to be something creating memory pressure. Any fix means changing the configuration of every front-end server and restarting the whole fleet of many thousands of servers, a long and careful process. What do you do?"
       },
       "options": [
         {
@@ -251,7 +251,7 @@
             "en": "The chart looks calm, but it is an untested configuration on many thousands of servers. AWS chose not to raise the limit without testing: the capacity is already gone and there is headroom anyway. Back to the fork."
           },
           "miss": {
-            "ru": "Всё хорошо: потоки ниже нового лимита. Но нужды в нём нет, мощность уже убрана, а непроверенный лимит на тысячах серверов — лишний риск. Вернись к развилке.",
+            "ru": "Всё хорошо: потоки ниже нового лимита. Но он не нужен: мощность уже убрана, а непроверенный лимит на тысячах серверов добавляет риск. Вернись к развилке.",
             "en": "All fine: threads are below the new limit. But it is not needed, the capacity is gone, and an untested limit on thousands of servers is needless risk. Back to the fork."
           }
         },
@@ -264,7 +264,7 @@
           "chart": "capback",
           "degraded": true,
           "result": {
-            "ru": "Каждый новый сервер — это ещё один поток на каждом сервере fleet. Потоки снова выше лимита, и всё начинается сначала. Вернись к развилке.",
+            "ru": "Каждый новый сервер добавляет по потоку на каждом сервере fleet. Потоки снова выше лимита, и всё начинается сначала. Вернись к развилке.",
             "en": "Every new server is one more thread on every server in the fleet. Threads go over the limit again and it all starts over. Back to the fork."
           },
           "miss": {
@@ -293,7 +293,7 @@
     }
   ],
   "outro": {
-    "ru": "Каждый front-end сервер держал по потоку ОС на каждый другой сервер fleet. Небольшое добавление мощности увело все серверы за лимит потоков ОС ([потоки](chart:threads)). Кеш shard-map перестал строиться, и fleet не мог маршрутизировать запросы. Без мощности и после медленного рестарта Kinesis восстановился к 22:23.\n\nПо цепочке упали Cognito ([график](chart:cognito)) и CloudWatch, от которого зависят AutoScaling и Lambda. Даже статус на Service Health Dashboard сначала не могли обновить: инструмент для публикации сам использует Cognito.\n\nДля нагрузочника: потоков на сервер пропорционально размеру fleet, а всего в fleet — квадрату. Такой лимит не ловит тест «больше RPS на тот же кластер», его ловит тест «тот же RPS на кластере больше». AWS добавил алармы на потребление потоков, переходит на более крупные серверы (их меньше, значит меньше потоков) и делит front-end на cells, чтобы каждая работала в проверенном диапазоне.\n\n[Весь инцидент на графике ошибок](chart:errors)",
+    "ru": "Каждый front-end сервер держал по потоку ОС на каждый другой сервер fleet. Небольшое добавление мощности увело все серверы за лимит потоков ОС ([потоки](chart:threads)). Кеш shard-map перестал строиться, и fleet не мог маршрутизировать запросы. Без мощности и после медленного рестарта Kinesis восстановился к 22:23.\n\nПо цепочке упали Cognito ([график](chart:cognito)) и CloudWatch, от которого зависят AutoScaling и Lambda. Даже статус на Service Health Dashboard сначала не могли обновить: инструмент для публикации сам использует Cognito.\n\nДля нагрузочника: число потоков на сервер растёт пропорционально размеру fleet, а их сумма по всему fleet растёт как квадрат размера. Такой лимит не ловит тест «больше RPS на тот же кластер», его ловит тест «тот же RPS на кластере больше». AWS добавил алармы на потребление потоков, переходит на более крупные серверы (их меньше, значит меньше потоков) и делит front-end на cells, чтобы каждая работала в проверенном диапазоне.\n\n[Весь инцидент на графике ошибок](chart:errors)",
     "en": "Every front-end server kept one OS thread for every other server in the fleet. A small capacity addition pushed every server past the OS thread limit ([threads](chart:threads)). The shard-map cache stopped building and the fleet could not route requests. With the capacity removed and a slow restart, Kinesis recovered at 10:23 PM.\n\nCognito ([chart](chart:cognito)) and CloudWatch, which AutoScaling and Lambda depend on, went down with it. At first AWS could not even update the Service Health Dashboard: the posting tool itself uses Cognito.\n\nFor load testers: threads per server grow with the fleet size, and threads across the fleet grow with its square. A test of “more RPS on the same cluster” never finds that limit; a test of “the same RPS on a bigger cluster” does. AWS added alarms on thread consumption, is moving to larger servers (fewer of them, so fewer threads) and is splitting the front-end into cells, each running in a tested range.\n\n[The whole incident on the error chart](chart:errors)"
   },
   "charts": {
@@ -466,7 +466,8 @@
             "en": "Cognito fix"
           }
         }
-      ]
+      ],
+      "interpolation": "linear"
     },
     "threads": {
       "title": {
@@ -828,7 +829,8 @@
             "en": "INSUFFICIENT_DATA"
           }
         }
-      ]
+      ],
+      "interpolation": "step"
     },
     "wait": {
       "title": {
@@ -1158,7 +1160,8 @@
             "en": "all at once"
           }
         }
-      ]
+      ],
+      "interpolation": "linear"
     }
   }
 }

@@ -30,8 +30,7 @@
     s.dataset.domains = 'artycorp.github.io';
     document.head.append(s);
   }
-  const episodeNo = location.pathname.match(/(\d{3})\.html$/)?.[1];
-  const track = (name, data) => window.umami?.track(name, { episode: episodeNo, lang, ...data });
+  const track = (name, data) => window.umami?.track(name, { episode: epId, lang, ...data });
 
   const app = document.getElementById('app');
   const t = v => typeof v === 'string' ? v : (v[lang] ?? v.en);
@@ -443,14 +442,7 @@
       const height = Math.max(240, Math.min(380, innerHeight * 0.5));
       app.append(panel(ep, c, until ?? undefined, { threshold: until == null, height }));
       if (c.illustrative) app.append(el('p', 'chart-source', UI[lang].illustrative));
-      if (until != null) return;
-      if (c.note) paras(t(c.note), app);
-      const src = el('p', 'chart-source');
-      const a = el('a', null, ep.source.title);
-      a.href = ep.source.url;
-      a.rel = 'noopener';
-      src.append(`${UI[lang].source}: `, a);
-      app.append(src);
+      if (until == null && c.note) paras(t(c.note), app);
     };
     render();
   }
