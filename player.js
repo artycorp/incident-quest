@@ -392,6 +392,7 @@
         { label: time ? 'time' : t(c.xLabel ?? ''), value: (u, v) => v == null ? '—' : time ? hhmm(v) : v },
         ...c.series.map((s, i) => ({
           label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: true,
+          ...(c.interpolation === 'step' && { paths: uPlot.paths.stepped({ align: 1 }) }),
           ...(c.illustrative && { dash: [8, 5] }),
           ...(threshold && s.threshold && { stroke: css('--threshold'), dash: [10, 6] }),
         })),
@@ -442,6 +443,7 @@
       const height = Math.max(240, Math.min(380, innerHeight * 0.5));
       app.append(panel(ep, c, until ?? undefined, { threshold: until == null, height }));
       if (c.illustrative) app.append(el('p', 'chart-source', UI[lang].illustrative));
+      if (until != null) return;
       if (c.note) paras(t(c.note), app);
       const src = el('p', 'chart-source');
       const a = el('a', null, ep.source.title);

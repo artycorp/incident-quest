@@ -113,11 +113,11 @@ The intro links a diagram of the incident's infrastructure, drawn with the `arch
 
 Every option result has a chart (see *Result charts*); charts in the text are optional. Add one where the source gives numbers a reader would want to see as a shape: latency before and after, a limit being hit, a recovery curve. Link it from the text at the moment the reader needs it (the intro's first symptom, or the `result` that reveals the metric).
 
-**The chart shows only what the on-call knows at that moment of the story.** Every chart link in `intro` and `steps` carries the story's current moment: `chart:p99@00:07` when the pager fires, `chart:p99@00:12` in a step that says five minutes have passed. The page draws points up to that moment, marks it with a "now" line, and hides everything after it, so the chart never spoils the next step. One chart can be linked from several steps with a later moment each time. Only `outro` links the uncut chart: `chart:p99`.
+**The chart shows only what the on-call knows at that moment of the story.** Every chart link in `intro` and `steps` carries the story's current moment: `chart:p99@00:07` when the pager fires, `chart:p99@00:12` in a step that says five minutes have passed. The page draws points up to that moment, marks it with a "now" line, and hides everything after it, so the chart never spoils the next step; the cut page also hides `note` and the source link, which appear only on the uncut chart. One chart can be linked from several steps with a later moment each time. Only `outro` links the uncut chart: `chart:p99`.
 
 There are two kinds of charts:
 
-- **Sourced.** Every point in `values` and every `marks` time is a number or timestamp stated in the postmortem. Where the source gives only a few numbers, plot only those points; the line between them is the honest shape. `note` says what it is drawn from, e.g. "Points from the numbers in the AWS summary; times are PST."
+- **Sourced.** Every point in `values` and every `marks` time is a number or timestamp stated in the postmortem. Where the source gives only a few numbers, plot only those points and let the shape between them follow *Shape*. `note` says what it is drawn from, e.g. "Points from the numbers in the AWS summary; times are PST."
 - **Illustrative.** The story states a signal in words without numbers ("traffic was normal", "almost no 5xx", "CPU looked fine"). Draw it as an illustration: set `"illustrative": true`, invent values that match the words and agree with every sourced number, and write in `note` which sentence of the source it illustrates. The page draws illustrative charts with dashed lines with an "Illustration" badge in the panel title. Add one for each such signal the on-call would check on a dashboard — readers learn most from seeing what looked normal.
 
 Format:
@@ -125,6 +125,7 @@ Format:
 - `x` contains a point at every moment a link cuts at, so the "now" line always lands on data.
 - `x` is either `"HH:MM"` strings (crossing midnight is handled) or plain numbers with an `xLabel` (`{ "ru", "en" }`). All series share the same `x`; use `null` for a missing value.
 - The y axis starts at 0. Set `yMax` when auto-scaling would exaggerate a small signal: "almost no 5xx" at 0.05–0.1 % gets `"yMax": 5` so it reads as near zero, not as a spike.
+- **Shape.** Draw each series the way the real metric moves. A state that flips at a moment (availability, servers in rotation, a config limit, CPU pinned at 100 %) gets `"interpolation": "step"`: the value holds until the next point, so an outage is a cliff. A gradual metric keeps the default line; where it jumps (errors at the first alarm), add a point just before the jump so the rise is sharp. Illustrative values stay consistent with each other, e.g. threads per server proportional to the fleet size chart.
 - `marks` are vertical event lines (deploy, page, mitigation) with a short label.
 - Up to 3 series per chart. Check each chart via `chart.html?ep=NNN&id=<id>` during the *Check* step.
 

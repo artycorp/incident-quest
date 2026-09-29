@@ -373,7 +373,8 @@
           }
         }
       ],
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "rotation": {
       "title": {
@@ -412,7 +413,8 @@
         "en": "Illustrates “the load balancer took the servers out of rotation”. The postmortem gives no server count, so values are percentages. Times are from the postmortem, UTC."
       },
       "illustrative": true,
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "cpu": {
       "title": {
@@ -451,7 +453,8 @@
         "en": "Illustrates “caused one of our regular expressions to consume high CPU on our web servers”. The postmortem gives no exact values."
       },
       "illustrative": true,
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "latency": {
       "title": {
@@ -507,7 +510,8 @@
         "ru": "Иллюстрация к фразам «This caused the home page to stop responding fast enough» и «everything but the home page would have been accessible». Значения выдуманы.",
         "en": "Illustrates “This caused the home page to stop responding fast enough” and “everything but the home page would have been accessible”. Values are made up."
       },
-      "illustrative": true
+      "illustrative": true,
+      "interpolation": "step"
     },
     "checks": {
       "title": {
@@ -520,9 +524,13 @@
       },
       "x": [
         0,
+        2500,
         5000,
+        7500,
         10000,
+        12500,
         15000,
+        17500,
         20000
       ],
       "series": [
@@ -532,10 +540,14 @@
             "en": "character checks"
           },
           "values": [
-            0,
+            0.0,
+            3.125,
             12.5,
-            50,
+            28.125,
+            50.0,
+            78.125,
             112.5,
+            153.125,
             199.99
           ]
         }
@@ -592,7 +604,8 @@
           }
         }
       ],
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "db": {
       "title": {
@@ -782,7 +795,8 @@
           }
         }
       ],
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "morecap": {
       "title": {
@@ -826,7 +840,8 @@
           }
         }
       ],
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "wait": {
       "title": {
@@ -861,7 +876,8 @@
         "en": "Illustration: what this action would have led to. The postmortem has no such step; while the post is in the home page list, the site stays down."
       },
       "illustrative": true,
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     }
   }
 }
