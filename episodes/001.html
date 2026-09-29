@@ -14,6 +14,7 @@
     "ru": "Убийство в канун Дня благодарения",
     "en": "Murder on Thanksgiving Eve"
   },
+  "dashboard": "Kinesis · us-east-1",
   "source": {
     "title": "AWS: Summary of the Amazon Kinesis Event in the Northern Virginia (US-EAST-1) Region (2020)",
     "url": "https://aws.amazon.com/message/11201/"
@@ -24,6 +25,10 @@
   },
   "steps": [
     {
+      "hint": {
+        "ru": "Что изменилось в системе незадолго до алармов? Ожидание доказательств тоже чего-то стоит.",
+        "en": "What changed in the system shortly before the alarms? Waiting for proof has a price too."
+      },
       "text": {
         "ru": "05:15. Алармы: ошибки при записи и чтении Kinesis. Ночью, с 02:44 до 03:47, во front-end fleet добавляли мощность. Но часть ошибок с новыми серверами не связана и осталась бы и без них. Что делаешь первым?",
         "en": "5:15 AM. Alarms: errors putting and getting Kinesis records. Overnight, from 2:44 to 3:47, capacity was added to the front-end fleet. But some errors have nothing to do with the new servers and would likely persist without them. What do you do first?"
@@ -95,6 +100,10 @@
       ]
     },
     {
+      "hint": {
+        "ru": "Фикс займёт часы и затронет весь fleet. Что будет, если гипотеза окажется неверной?",
+        "en": "The fix takes hours and touches the whole fleet. What happens if the theory turns out wrong?"
+      },
       "text": {
         "ru": "07:51. Круг подозреваемых сузился до пары кандидатов. Главный — что-то, что создаёт давление на память. Любой фикс требует поменять конфигурацию каждого front-end сервера и перезапустить весь fleet из многих тысяч серверов, а это долгий и аккуратный процесс. Что делаешь?",
         "en": "7:51 AM. The suspects are down to a couple of candidates. The leading one is something that seems to create memory pressure. Any fix means changing the configuration of every front-end server and restarting the whole fleet of many thousands of servers, a long and careful process. What do you do?"
@@ -166,6 +175,10 @@
       ]
     },
     {
+      "hint": {
+        "ru": "Сравни две линии на графике и посмотри, что с ними стало после 02:44.",
+        "en": "Compare the two lines on the chart and look at what happened to them after 02:44."
+      },
       "text": {
         "ru": "09:39. Версия с памятью не подтвердилась. Открываешь потоки ОС на front-end серверах. Что видишь?",
         "en": "9:39 AM. The memory theory did not hold. You open OS threads on the front-end servers. What do you see?"
@@ -204,6 +217,10 @@
       ]
     },
     {
+      "hint": {
+        "ru": "Вспомни, что вытолкнуло потоки за лимит. Как вернуть сервис и не повторить этого?",
+        "en": "Remember what pushed the threads over the limit. How do you bring the service back without repeating it?"
+      },
       "text": {
         "ru": "09:39. Причина найдена, новую мощность только что убрали. Как возвращаешь Kinesis?",
         "en": "9:39 AM. Root cause found, the new capacity was just removed. How do you bring Kinesis back?"
@@ -292,6 +309,7 @@
         "02:44",
         "03:47",
         "04:47",
+        "05:10",
         "05:15",
         "06:00",
         "07:01",
@@ -316,6 +334,7 @@
             "en": "errors"
           },
           "values": [
+            0.1,
             0.1,
             0.1,
             0.1,
@@ -379,6 +398,7 @@
         "02:44",
         "03:47",
         "04:47",
+        "05:10",
         "05:15",
         "06:00",
         "07:01",
@@ -403,6 +423,7 @@
             "en": "errors"
           },
           "values": [
+            0.1,
             0.1,
             0.1,
             0.1,
@@ -483,15 +504,15 @@
             "en": "threads"
           },
           "values": [
-            90,
-            90,
-            95,
+            97,
+            97,
             103,
             103,
             103,
             102,
             101,
             100,
+            98,
             97,
             97,
             97,
@@ -510,6 +531,7 @@
             "ru": "лимит ОС",
             "en": "OS limit"
           },
+          "threshold": true,
           "values": [
             100,
             100,
@@ -1011,6 +1033,7 @@
             "ru": "лимит ОС",
             "en": "OS limit"
           },
+          "threshold": true,
           "values": [
             100,
             150,
@@ -1033,7 +1056,8 @@
           }
         }
       ],
-      "yMax": 160
+      "yMax": 160,
+      "interpolation": "step"
     },
     "capback": {
       "title": {
@@ -1068,6 +1092,7 @@
             "ru": "лимит ОС",
             "en": "OS limit"
           },
+          "threshold": true,
           "values": [
             100,
             100,

@@ -4,12 +4,14 @@
           mistakes: n => n ? `Тупиков по пути: ${n}` : 'Ни одного тупика — отличное расследование!',
           now: 'сейчас', illustrativeShort: 'иллюстрация', illustrative: 'Иллюстрация: в источнике нет цифр, значения придуманы по описанию в тексте.', back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
           noChart: 'График не найден.', checkQ: 'Что видишь на графике?',
-          checkOk: 'Всё в порядке, вернуться к развилке', checkBad: 'Есть деградация' },
+          checkOk: 'Всё в порядке, вернуться к развилке', checkBad: 'Есть деградация',
+          hint: 'Подсказка', hints: n => `Подсказок: ${n}` },
     en: { step: 'Step', next: 'Next', reveal: 'What really happened', source: 'Source',
           mistakes: n => n ? `Dead ends on the way: ${n}` : 'No dead ends — great investigation!',
           now: 'now', illustrativeShort: 'illustration', illustrative: 'Illustration: the source has no numbers, values are made up from the description.', back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
           noChart: 'Chart not found.', checkQ: 'What does the chart show?',
-          checkOk: 'All fine, back to the fork', checkBad: 'Degradation' },
+          checkOk: 'All fine, back to the fork', checkBad: 'Degradation',
+          hint: 'Hint', hints: n => `Hints used: ${n}` },
   };
   const store = {
     get: k => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -98,25 +100,46 @@
     app.append(bar);
   }
 
-  function inlineChart(ep, ref) {
-    const [id, until] = ref.split('@');
-    const c = ep.charts[id];
-    const fig = el('figure', 'inline-chart');
-    const cap = el('figcaption');
-    const open = el('a', 'chart-link', t(c.title));
-    open.href = `../chart.html?ep=${epId}&id=${id}${until ? `&until=${until}` : ''}&lang=${lang}`;
-    open.target = '_blank';
-    open.rel = 'noopener';
-    cap.append(open);
-    if (c.illustrative) cap.append(el('span', 'illustrative', UI[lang].illustrativeShort));
+  function panel(ep, c, until, { threshold = false, href, height = 220 } = {}) {
+    const fig = el('figure', 'panel');
+    const bar = el('div', 'dash-bar');
+    const crumbs = el('span', 'crumbs', 'Dashboards › ');
+    crumbs.append(el('b', null, t(ep.dashboard ?? ep.title)));
+    const range = `${c.x[0]} – ${until ?? c.x.at(-1)}${c.xLabel ? ` ${t(c.xLabel)}` : ''}`;
+    const refresh = el('span', 'refresh', '↻');
+    refresh.ariaHidden = 'true';
+    bar.append(crumbs, el('span', 'picker', `🕐 ${range}`), refresh);
+    const card = el('div', 'panel-card');
+    const head = el('figcaption');
+    const title = el(href ? 'a' : 'span', href ? 'chart-link' : null, t(c.title));
+    if (href) {
+      title.href = href;
+      title.target = '_blank';
+      title.rel = 'noopener';
+    }
+    head.append(title);
+    if (c.illustrative) {
+      const badge = el('span', 'illustrative', UI[lang].illustrativeShort);
+      badge.title = UI[lang].illustrative;
+      head.append(badge);
+    }
     const box = el('div', 'plot');
-    fig.append(cap, box);
-    loadUPlot().then(() => box.isConnected && drawChart(box, c, until, 220));
+    card.append(head, box);
+    fig.append(bar, card);
+    loadUPlot().then(() => box.isConnected && drawChart(box, c, until, height, threshold));
     return fig;
   }
 
+  function inlineChart(ep, ref, threshold) {
+    const [id, until] = ref.split('@');
+    const href = `../chart.html?ep=${epId}&id=${id}${until ? `&until=${until}` : ''}&lang=${lang}`;
+    return panel(ep, ep.charts[id], until, { threshold, href });
+  }
+
   function playEpisode(ep) {
-    const state = { step: 0, steps: ep.steps.map(s => ({ order: shuffle(s.options.length), tried: [], checks: {}, solved: false })) };
+    const mistakes = () => state.steps.reduce((n, st) => n + st.tried.length - 1, 0);
+    const hints = () => state.steps.filter(st => st.hint).length;
+    const state = { step: 0, steps: ep.steps.map(s => ({ order: shuffle(s.options.length), tried: [], checks: {}, solved: false, hint: false })) };
 
     render = () => {
       const y = scrollY;
@@ -133,7 +156,20 @@
         const box = el('section', 'step');
         box.append(el('h2', null, `${UI[lang].step} ${i + 1}/${ep.steps.length}`));
         paras(t(s.text), box);
-        if (s.chart) box.append(inlineChart(ep, s.chart));
+        if (s.chart) box.append(inlineChart(ep, s.chart, st.hint));
+        if (st.hint) {
+          const h = el('div', 'hint');
+          paras(t(s.hint), h);
+          box.append(h);
+        } else if (s.hint && !st.solved) {
+          const h = el('button', 'hint-btn', UI[lang].hint);
+          h.onclick = () => {
+            st.hint = true;
+            track('hint', { step: i + 1 });
+            render();
+          };
+          box.append(h);
+        }
         const pending = st.tried.some(j => s.options[j].chart && !s.options[j].correct && !(j in st.checks));
         for (const j of st.solved ? st.tried : st.order) {
           const o = s.options[j], tried = st.tried.includes(j);
@@ -151,10 +187,10 @@
           const r = el('div', `result ${o.correct ? 'right' : 'wrong'}`);
           if (o.correct || !o.chart) {
             paras(t(o.result), r);
-            if (o.chart) r.append(inlineChart(ep, o.chart));
+            if (o.chart) r.append(inlineChart(ep, o.chart, st.hint));
           } else {
             const said = st.checks[j];
-            r.append(inlineChart(ep, o.chart), el('p', null, UI[lang].checkQ));
+            r.append(inlineChart(ep, o.chart, st.hint), el('p', null, UI[lang].checkQ));
             for (const bad of [false, true]) {
               const c = el('button', 'option check', bad ? UI[lang].checkBad : UI[lang].checkOk);
               c.disabled = said !== undefined;
@@ -175,7 +211,7 @@
           const next = el('button', 'next', isLast ? UI[lang].reveal : UI[lang].next);
           next.onclick = () => {
             state.step++;
-            if (isLast) track('finish', { mistakes: state.steps.reduce((n, st) => n + st.tried.length - 1, 0) });
+            if (isLast) track('finish', { mistakes: mistakes(), hints: hints() });
             render();
             app.lastElementChild.scrollIntoView({ behavior: 'smooth' });
           };
@@ -194,8 +230,8 @@
         a.rel = 'noopener';
         src.append(`${UI[lang].source}: `, a);
         out.append(src);
-        const mistakes = state.steps.reduce((n, st) => n + st.tried.length - 1, 0);
-        out.append(el('p', 'score', UI[lang].mistakes(mistakes)));
+        const score = [UI[lang].mistakes(mistakes()), hints() && UI[lang].hints(hints())].filter(Boolean);
+        out.append(el('p', 'score', score.join(' · ')));
         app.append(out);
       }
       scrollTo(0, y);
@@ -233,7 +269,13 @@
 
   const toMin = v => typeof v === 'string' ? v.split(':').reduce((h, m) => h * 60 + +m) : v;
   const hhmm = m => [Math.floor(m / 60) % 24, m % 60].map(n => String(n).padStart(2, '0')).join(':');
-  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fmt = (v, unit) => {
+    if (v == null) return '—';
+    if (/^(ms|мс)$/.test(unit) && Math.abs(v) >= 1000) [v, unit] = [v / 1000, lang === 'ru' ? 'с' : 's'];
+    const [n, k] = Math.abs(v) >= 1e6 ? [v / 1e6, 'M'] : Math.abs(v) >= 1e3 ? [v / 1e3, 'K'] : [v, ''];
+    const num = +n.toFixed(Math.abs(n) >= 100 ? 0 : Math.abs(n) >= 10 ? 1 : 2) + k;
+    return !unit ? num : unit === '%' ? `${num}%` : `${num} ${unit}`;
+  };
 
   const UPLOT = 'https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot';
   let uplotReady;
@@ -259,7 +301,10 @@
     plots = [];
   };
 
-  function drawChart(box, c, until, height) {
+  function drawChart(box, c, until, height, threshold) {
+    const style = getComputedStyle(box);
+    const css = n => style.getPropertyValue(n).trim();
+    const unit = c.unit && t(c.unit), tickUnit = unit?.length <= 3 ? unit : '';
     const time = typeof c.x[0] === 'string';
     const xs = c.x.reduce((acc, v) => {
       let m = toMin(v);
@@ -284,6 +329,12 @@
         ctx.moveTo(x, bbox.top);
         ctx.lineTo(x, bbox.top + bbox.height);
         ctx.stroke();
+        const bottom = bbox.top + bbox.height, w = 4 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(x - w, bottom);
+        ctx.lineTo(x + w, bottom);
+        ctx.lineTo(x, bottom - 1.5 * w);
+        ctx.fill();
         ctx.textAlign = left ? 'right' : 'left';
         ctx.fillText(label, x + (left ? -6 : 4) * dpr, y);
       };
@@ -306,6 +357,25 @@
       }
       ctx.restore();
     };
+    const tip = el('div', 'tooltip');
+    tip.hidden = true;
+    const tooltip = u => {
+      const i = u.cursor.idx;
+      tip.hidden = i == null;
+      if (tip.hidden) return;
+      const x = u.data[0][i];
+      tip.replaceChildren(el('b', null, time ? hhmm(x) : `${x}${c.xLabel ? ` ${t(c.xLabel)}` : ''}`));
+      c.series.forEach((s, k) => {
+        const row = el('div');
+        const swatch = el('i');
+        swatch.style.background = u.series[k + 1].stroke();
+        row.append(swatch, `${t(s.name)} `, el('span', null, fmt(u.data[k + 1][i], tickUnit)));
+        tip.append(row);
+      });
+      const { left, top } = u.cursor, w = tip.offsetWidth, h = tip.offsetHeight;
+      tip.style.left = `${left + 12 + w > u.over.clientWidth ? Math.max(0, left - 12 - w) : left + 12}px`;
+      tip.style.top = `${Math.max(0, Math.min(top + 12, u.over.clientHeight - h))}px`;
+    };
     const plot = new uPlot({
       width: box.clientWidth,
       height,
@@ -314,19 +384,44 @@
         y: { range: (u, min, max) => [0, Math.max(c.yMax ?? 0, max * 1.1)] },
       },
       axes: [
-        { ...axis, ...(time && { values: (u, vs) => vs.map(hhmm) }) },
-        { ...axis, label: c.unit && t(c.unit), size: 56 },
+        { ...axis, ...(time && { incrs: [1, 2, 5, 10, 15, 30, 60, 120, 180, 240, 360, 720], values: (u, vs) => vs.map(hhmm) }) },
+        { ...axis, label: tickUnit ? undefined : unit, size: 56, values: (u, vs) => vs.map(v => fmt(v, tickUnit)) },
       ],
+      legend: { show: false },
       series: [
         { label: time ? 'time' : t(c.xLabel ?? ''), value: (u, v) => v == null ? '—' : time ? hhmm(v) : v },
         ...c.series.map((s, i) => ({
           label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: true,
+          ...(c.interpolation === 'step' && { paths: uPlot.paths.stepped({ align: 1 }) }),
           ...(c.illustrative && { dash: [8, 5] }),
+          ...(threshold && s.threshold && { stroke: css('--threshold'), dash: [10, 6] }),
         })),
       ],
-      hooks: { draw: [marks] },
+      hooks: { draw: [marks], setCursor: [tooltip], ready: [u => u.over.append(tip)] },
     }, [xs.slice(0, n), ...c.series.map(s => s.values.slice(0, n))], box);
     plots.push({ plot, box });
+    const touch = e => {
+      const r = plot.over.getBoundingClientRect(), p = e.touches[0];
+      plot.setCursor({ left: p.clientX - r.left, top: p.clientY - r.top });
+    };
+    plot.over.addEventListener('touchstart', touch, { passive: true });
+    plot.over.addEventListener('touchmove', touch, { passive: true });
+
+    const legend = el('table', 'legend');
+    const head = el('tr');
+    head.append(el('th'), el('th', null, 'Last'), el('th', null, 'Max'));
+    legend.append(head);
+    c.series.forEach((s, i) => {
+      const vs = s.values.slice(0, n).filter(v => v != null);
+      const name = el('td', null, t(s.name));
+      const swatch = el('i');
+      swatch.style.background = plot.series[i + 1].stroke();
+      name.prepend(swatch);
+      const row = el('tr');
+      row.append(name, el('td', null, fmt(vs.at(-1), tickUnit)), el('td', null, fmt(vs.length ? Math.max(...vs) : null, tickUnit)));
+      legend.append(row);
+    });
+    box.after(legend);
   }
 
   async function showChart() {
@@ -344,10 +439,11 @@
         return;
       }
       header(t(c.title), `episodes/${id}.html`, UI[lang].toEpisode);
-      app.append(el('h1', 'chart-title', t(c.title)));
-      if (c.illustrative) app.append(el('p', 'illustrative', UI[lang].illustrative));
-      const box = el('div', 'plot');
-      app.append(box);
+      const until = params.get('until');
+      const height = Math.max(240, Math.min(380, innerHeight * 0.5));
+      app.append(panel(ep, c, until ?? undefined, { threshold: until == null, height }));
+      if (c.illustrative) app.append(el('p', 'chart-source', UI[lang].illustrative));
+      if (until != null) return;
       if (c.note) paras(t(c.note), app);
       const src = el('p', 'chart-source');
       const a = el('a', null, ep.source.title);
@@ -355,7 +451,6 @@
       a.rel = 'noopener';
       src.append(`${UI[lang].source}: `, a);
       app.append(src);
-      drawChart(box, c, params.get('until'), Math.max(240, Math.min(380, innerHeight * 0.5)));
     };
     render();
   }

@@ -14,16 +14,21 @@
     "ru": "Тайна счастливой мелодии",
     "en": "The Mystery of the Happy Tune"
   },
+  "dashboard": "Stack Overflow",
   "source": {
     "title": "Stack Exchange: Outage Postmortem - July 20, 2016",
     "url": "https://web.archive.org/web/20160720200842/https://stackstatus.net/post/147710624694/outage-postmortem-july-20-2016"
   },
   "intro": {
-    "ru": "20 июля 2016 года, Stack Overflow. Запросы пользователей принимает балансировщик и раздаёт их web-серверам. Web-серверы собирают главную страницу со списком постов и все остальные страницы ([схема сервиса](002.arch.ru.html)).\n\n14:44 UTC. Сайт перестаёт открываться целиком ([график доступности](chart:down@14:44)). Ты дежурный.",
-    "en": "July 20, 2016, Stack Overflow. User requests land on a load balancer, which hands them to the web servers. The web servers render the home page with its list of posts, and every other page too ([service diagram](002.arch.en.html)).\n\n14:44 UTC. The whole site stops loading ([availability chart](chart:down@14:44)). You are on call."
+    "ru": "20 июля 2016 года, Stack Overflow. Запросы пользователей принимает балансировщик и раздаёт их web-серверам. Web-серверы собирают главную страницу со списком постов и все остальные страницы ([схема сервиса](002.arch.ru.html)).\n\n14:44 UTC. Сайт перестаёт открываться целиком ([график доступности](chart:down@14:46)). Ты дежурный.",
+    "en": "July 20, 2016, Stack Overflow. User requests land on a load balancer, which hands them to the web servers. The web servers render the home page with its list of posts, and every other page too ([service diagram](002.arch.en.html)).\n\n14:44 UTC. The whole site stops loading ([availability chart](chart:down@14:46)). You are on call."
   },
   "steps": [
     {
+      "hint": {
+        "ru": "Сайт лежит целиком, до единой страницы. Кто решает, куда отправлять запросы?",
+        "en": "The whole site is down, every single page. Who decides where requests go?"
+      },
       "text": {
         "ru": "14:44 UTC. Stack Overflow недоступен целиком: не открывается ни одна страница. Ты дежурный. С чего начнёшь?",
         "en": "14:44 UTC. Stack Overflow is down as a whole: not a single page loads. You are on call. Where do you start?"
@@ -35,7 +40,7 @@
             "en": "Check what the load balancer thinks of the web servers"
           },
           "correct": true,
-          "chart": "rotation@14:44",
+          "chart": "rotation@14:46",
           "result": {
             "ru": "Балансировщик вывел из ротации все web-серверы: они не проходят health check. А health check у балансировщика — это запрос главной страницы. Значит, главная перестала отвечать вовремя. Надо понять, почему.",
             "en": "The load balancer has taken every web server out of rotation: they fail the health check. And the balancer’s health check is a request for the home page. So the home page has stopped responding fast enough. Time to find out why."
@@ -95,6 +100,10 @@
       ]
     },
     {
+      "hint": {
+        "ru": "У CPU есть потолок — 100 %. Где линия относительно него?",
+        "en": "CPU tops out at 100%. Where is the line relative to that?"
+      },
       "text": {
         "ru": "Главная не укладывается в health check. Открываешь CPU web-серверов. Что видишь?",
         "en": "The home page does not make it through the health check. You open CPU on the web servers. What do you see?"
@@ -150,6 +159,10 @@
       ]
     },
     {
+      "hint": {
+        "ru": "Каждый просмотр главной стал дорогим. Что на главной меняется от минуты к минуте?",
+        "en": "Every home page view got expensive. What on the home page changes from minute to minute?"
+      },
       "text": {
         "ru": "Каждый просмотр главной стоит web-серверам слишком много CPU. Что ищешь?",
         "en": "Every home page view costs the web servers far too much CPU. What do you look for?"
@@ -221,6 +234,10 @@
       ]
     },
     {
+      "hint": {
+        "ru": "Проблема в одной регулярке. Какой самый короткий путь убрать именно её?",
+        "en": "The problem is one regex. What is the shortest way to remove exactly that?"
+      },
       "text": {
         "ru": "14:54. Причина известна: регулярка на посте из списка главной. Как вернуть сайт?",
         "en": "14:54. The cause is known: the regex on a post from the home page list. How do you bring the site back?"
@@ -306,6 +323,7 @@
       "x": [
         "14:40",
         "14:44",
+        "14:46",
         "14:48",
         "14:54",
         "15:08",
@@ -320,6 +338,7 @@
           },
           "values": [
             100,
+            0,
             0,
             0,
             0,
@@ -356,7 +375,8 @@
           }
         }
       ],
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "rotation": {
       "title": {
@@ -367,6 +387,7 @@
       "x": [
         "14:40",
         "14:44",
+        "14:46",
         "14:48",
         "14:54",
         "15:08",
@@ -385,6 +406,7 @@
             0,
             0,
             0,
+            0,
             100,
             100
           ]
@@ -395,7 +417,8 @@
         "en": "Illustrates “the load balancer took the servers out of rotation”. The postmortem gives no server count, so values are percentages. Times are from the postmortem, UTC."
       },
       "illustrative": true,
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "cpu": {
       "title": {
@@ -434,7 +457,8 @@
         "en": "Illustrates “caused one of our regular expressions to consume high CPU on our web servers”. The postmortem gives no exact values."
       },
       "illustrative": true,
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "latency": {
       "title": {
@@ -490,7 +514,8 @@
         "ru": "Иллюстрация к фразам «This caused the home page to stop responding fast enough» и «everything but the home page would have been accessible». Значения выдуманы.",
         "en": "Illustrates “This caused the home page to stop responding fast enough” and “everything but the home page would have been accessible”. Values are made up."
       },
-      "illustrative": true
+      "illustrative": true,
+      "interpolation": "step"
     },
     "checks": {
       "title": {
@@ -503,9 +528,13 @@
       },
       "x": [
         0,
+        2500,
         5000,
+        7500,
         10000,
+        12500,
         15000,
+        17500,
         20000
       ],
       "series": [
@@ -515,10 +544,14 @@
             "en": "character checks"
           },
           "values": [
-            0,
+            0.0,
+            3.125,
             12.5,
-            50,
+            28.125,
+            50.0,
+            78.125,
             112.5,
+            153.125,
             199.99
           ]
         }
@@ -575,7 +608,8 @@
           }
         }
       ],
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "db": {
       "title": {
@@ -765,7 +799,8 @@
           }
         }
       ],
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "morecap": {
       "title": {
@@ -809,7 +844,8 @@
           }
         }
       ],
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     },
     "wait": {
       "title": {
@@ -844,7 +880,8 @@
         "en": "Illustration: what this action would have led to. The postmortem has no such step; while the post is in the home page list, the site stays down."
       },
       "illustrative": true,
-      "yMax": 100
+      "yMax": 100,
+      "interpolation": "step"
     }
   }
 }
