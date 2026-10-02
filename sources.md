@@ -23,6 +23,7 @@ Ordered simplest first: one mechanism, 1–3 components, a short postmortem.
 | todo | GitHub, 2026-02-09 | https://github.blog/news-insights/company-news/addressing-githubs-recent-availability-issues-2/ | Client apps grow reads 10×, a cache TTL cut from 12h to 2h adds writes; Monday peak overloads the auth database |
 | todo | Discord, 2017-03-20 | https://status.discordapp.com/incidents/dj3l6lw926kl | Flapping presence service, thundering herd on reconnect, frontend queues fill up memory |
 | todo | Duo, 2018-08-20/29 | https://status.duo.com/incidents/4w07bmvnt359 | Request queue overloads insufficient database capacity, cascading latency and timeouts |
+| 003 | Allegro, 2018-07-18 | https://blog.allegro.tech/2018/08/postmortem-why-allegro-went-down.html | Flash sale traffic ×2–3; services over-reserve cluster CPU/RAM, so new instances cannot start while hardware idles |
 | todo | Stack Exchange, 2015-03-31 | http://web.archive.org/web/20150404235419/https://stackstatus.net/post/115305251014/outage-postmortem-march-31-2015 | April Fools' StackEgg enabled for all users, its polling overloads the load balancers |
 | todo | Cloudflare, 2019-07-02 | https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-july-2-2019/ | Regex backtracking exhausting CPU across the edge |
 | todo | AWS us-east-1 internal network, 2021-12-07 | https://aws.amazon.com/message/12721/ | Client retry surge congesting internal network devices |
