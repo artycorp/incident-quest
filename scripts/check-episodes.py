@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 EPISODES = ROOT / "episodes"
 LINK = re.compile(r"\[([^\]]+)\]\(([^)]*)\)")
-OK_TARGET = re.compile(r"chart:[\w-]+(?:@[\d:.]+)?$|https://[^)\s]+$|[\w.-]+\.html$")
+OK_TARGET = re.compile(r"chart:[\w-]+(?:@[\d:.]+)?$|https://[^)\s]+$|[\w.-]+\.html(?:#[\w=-]+)?$")
 JSON_BLOCK = re.compile(r'(<script type="application/json" id="episode">\n)(.*?)(\n  </script>)', re.S)
 
 errors, warnings = [], []
@@ -35,7 +35,7 @@ def text(ep_id, where, v, required=True):
                 errors.append(f"{ep_id} {where}.{lang}: unsupported link target {target!r}")
             elif target.startswith("chart:"):
                 chart_ref(ep_id, f"{where}.{lang}", target[6:])
-            elif target.endswith(".html") and not (EPISODES / target).exists():
+            elif ".html" in target and not (EPISODES / target.partition("#")[0]).exists():
                 errors.append(f"{ep_id} {where}.{lang}: {target} does not exist")
 
 
