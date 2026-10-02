@@ -1,0 +1,2381 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Убийство за один злотый</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main id="app"></main>
+  <script type="application/json" id="episode">
+{
+  "title": {
+    "ru": "Убийство за один злотый",
+    "en": "Murder for One Zloty"
+  },
+  "dashboard": "Allegro · Listing/Search",
+  "source": {
+    "title": "Allegro Tech Blog: Postmortem — why Allegro went down (2018)",
+    "url": "https://blog.allegro.tech/2018/08/postmortem-why-allegro-went-down.html"
+  },
+  "intro": {
+    "ru": "18 июля 2018 года, Allegro. Сайт собран из микросервисов в частном облаке: Opbox рендерит страницы, Listing готовит страницы выдачи, Search ищет по офферам, Transaction проводит покупки ([схема сервиса](003.arch.ru.html)).\n\nВ 12:00 стартует акция: сто телефонов Honor 7C, которые обычно стоят около 850 злотых, продаются за 1 злотый. Прямую ссылку на оффер опубликовали заранее. В 11:15 Listing заранее масштабировали.\n\n11:50: трафик на основные сервисы на 50 % выше, чем вчера в это же время ([график трафика](chart:traffic@11:50)). 11:57: время ответа Listing и Search резко растёт ([график](chart:p99@11:57)). Ты дежурный.",
+    "en": "July 18, 2018, Allegro. The site is built from microservices in a private cloud: Opbox renders pages, Listing prepares search result pages, Search looks up offers, Transaction handles purchases ([service diagram](003.arch.en.html)).\n\nAt 12:00 a sale starts: one hundred Honor 7C phones that normally cost about 850 zloty go for 1 zloty. A direct link to the offer was published ahead of time. At 11:15 Listing was scaled out in advance.\n\n11:50: traffic to the major services is 50% above yesterday at the same time ([traffic chart](chart:traffic@11:50)). 11:57: Listing and Search response times shoot up ([chart](chart:p99@11:57)). You are on call."
+  },
+  "steps": [
+    {
+      "text": {
+        "ru": "18 июля, 11:57. Allegro: в 12:00 стартует акция, телефон за 1 злотый. В 11:50 трафик был на 50 % выше вчерашнего, теперь резко растёт время ответа Listing и Search. Ты дежурный. Что делаешь?",
+        "en": "July 18, 11:57. Allegro: a sale starts at 12:00, a phone for 1 zloty. At 11:50 traffic was 50% above yesterday, now Listing and Search response times are climbing fast. You are on call. What do you do?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Масштабирую Listing и Search: добавляю инстансы",
+            "en": "Scale out Listing and Search: add instances"
+          },
+          "correct": true,
+          "chart": "threads@11:57",
+          "result": {
+            "ru": "Да, так и сделали. Потоки Undertow на инстансах Listing упёрлись в потолок пула: каждый инстанс уже обрабатывает сколько может, остальные запросы ждут. Нужно больше инстансов, ты запрашиваешь их у кластера.",
+            "en": "Yes, that is what the team did. Undertow threads on the Listing instances have hit the pool ceiling: each instance is already serving all it can, the rest of the requests wait. You need more instances, so you ask the cluster for them."
+          }
+        },
+        {
+          "text": {
+            "ru": "Перезапускаю инстансы Listing и Search",
+            "en": "Restart the Listing and Search instances"
+          },
+          "correct": false,
+          "chart": "restart",
+          "result": {
+            "ru": "Верно, стало хуже: перезапущенные инстансы встают холодными прямо на пик трафика и отвечают ещё медленнее. Вернись к развилке.",
+            "en": "Right, it got worse: the restarted instances come up cold right into peak traffic and answer even slower. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: после рестарта p99 не упал, а вырос. Вернись к развилке.",
+            "en": "Look again: after the restart p99 did not drop, it went up. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Откатываю последний деплой",
+            "en": "Roll back the latest deploy"
+          },
+          "correct": false,
+          "chart": "rollback",
+          "result": {
+            "ru": "Верно, откат ничего не дал: время ответа растёт вместе с трафиком, код тут ни при чём. Вернись к развилке.",
+            "en": "Right, the rollback did nothing: response time grows with traffic, the code is not to blame. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: после отката p99 так и висит высоко. Вернись к развилке.",
+            "en": "Look again: after the rollback p99 stays high. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Включаю rate limiter на весь сайт",
+            "en": "Turn on the rate limiter for the whole site"
+          },
+          "correct": false,
+          "chart": "ratelimit",
+          "result": {
+            "ru": "Верно, это помогло бы частично: лимитер срезает пик, но пользователи получают пустую страницу, а она сама повторяет запросы. И сервисам всё равно не хватает инстансов на то, что лимитер пропустил. Вернись к развилке.",
+            "en": "Right, that would help only partly: the limiter trims the peak, but users get a blank page, and that page retries on its own. And the services still lack instances for what the limiter lets through. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: треть трафика отрезана, люди видят пустую страницу, которая долбит сайт повторами. Вернись к развилке.",
+            "en": "Look again: a third of the traffic is cut off, and people see a blank page that keeps hammering the site with retries. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "11:59. Ты запросил новые инстансы. Открываешь дашборд инстансов Search. Что видишь?",
+        "en": "11:59. You asked for more instances. You open the Search instances dashboard. What do you see?"
+      },
+      "chart": "instances@11:59",
+      "options": [
+        {
+          "text": {
+            "ru": "Деградация: новые инстансы не запускаются",
+            "en": "Degradation: the new instances are not starting"
+          },
+          "correct": true,
+          "chart": "threads@11:59",
+          "result": {
+            "ru": "Да. Запрошено 70, работает 56, и больше не прибавляется. Кластер не находит новым инстансам места, а старые так и сидят на потолке пула потоков.",
+            "en": "Yes. 70 requested, 56 running, and the number is not growing. The cluster finds no room for the new instances, and the old ones are still stuck at the thread pool ceiling."
+          }
+        },
+        {
+          "text": {
+            "ru": "Всё в порядке: автоскейлер догоняет, подожду",
+            "en": "All fine: the autoscaler is catching up, I will wait"
+          },
+          "correct": false,
+          "chart": "instances@12:03",
+          "result": {
+            "ru": "Верно, ждать бесполезно: запрошено уже 90, а работает всё те же 56. Вернись к развилке.",
+            "en": "Right, waiting is useless: 90 are requested now, and still the same 56 are running. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: разрыв между запрошенными и запущенными только растёт. Вернись к развилке.",
+            "en": "Look again: the gap between requested and running only grows. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Деградация: новые инстансы падают на старте",
+            "en": "Degradation: the new instances crash on start"
+          },
+          "correct": false,
+          "chart": "crashes",
+          "result": {
+            "ru": "Верно, падений нет: инстансы не падают, их просто не запускают. Вернись к развилке.",
+            "en": "Right, there are no crashes: the instances do not fall over, they are never started. Back to the fork."
+          },
+          "degraded": false,
+          "miss": {
+            "ru": "Посмотри ещё раз: падений ноль, инстансы до старта не доходят. Вернись к развилке.",
+            "en": "Look again: zero crashes, the instances never get as far as starting. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Деградация: перегружен один инстанс",
+            "en": "Degradation: one instance is overloaded"
+          },
+          "correct": false,
+          "chart": "threads@11:59",
+          "result": {
+            "ru": "Верно, деградация есть, но не у одного: median по инстансам на том же потолке, что и max. Упёрлись все. Вернись к развилке.",
+            "en": "Right, there is degradation, but not on one instance: the median across instances sits at the same ceiling as the max. All of them are maxed out. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: median и max на одном потолке, перегружены все инстансы. Вернись к развилке.",
+            "en": "Look again: median and max share one ceiling, every instance is overloaded. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "hint": {
+        "ru": "Новому инстансу нужно место на ноде. Какая из двух линий CPU решает, найдётся ли оно?",
+        "en": "A new instance needs room on a node. Which of the two CPU lines decides whether it gets any?"
+      },
+      "text": {
+        "ru": "Кластер не находит места для новых инстансов. Открываешь CPU той части кластера, что выделена под Listing и Search. Что видишь?",
+        "en": "The cluster finds no room for the new instances. You open CPU for the part of the cluster provisioned for Listing and Search. What do you see?"
+      },
+      "chart": "cluster@11:59",
+      "options": [
+        {
+          "text": {
+            "ru": "Деградация: CPU почти весь зарезервирован, а используется малая часть",
+            "en": "Degradation: almost all CPU is reserved, yet only a small part is used"
+          },
+          "correct": true,
+          "chart": "ram@11:59",
+          "result": {
+            "ru": "Да. При деплое каждый инстанс заявляет, сколько ядер и памяти ему нужно, и кластер держит это за ним, даже если он столько не ест. Часть сервисов заявила намного больше, чем потребляет. С памятью то же самое: место есть, но оно занято на бумаге.",
+            "en": "Yes. On deploy each instance declares how many cores and how much memory it needs, and the cluster holds that for it even if it never uses it. Some services declared far more than they consume. Memory is the same: the room is there, but it is taken on paper."
+          }
+        },
+        {
+          "text": {
+            "ru": "Деградация: кластер забит, нужны ещё ноды",
+            "en": "Degradation: the cluster is full, it needs more nodes"
+          },
+          "correct": false,
+          "chart": "idle",
+          "result": {
+            "ru": "Верно, железа хватает: кластер в целом загружен на треть. Ноды помогли бы частично, но не сняли бы блокер: новые ноды так же разберут резервациями. Вернись к развилке.",
+            "en": "Right, there is enough hardware: the cluster as a whole is a third busy. More nodes would help only partly and would not remove the blocker: reservations would grab them too. Back to the fork."
+          },
+          "degraded": false,
+          "miss": {
+            "ru": "Посмотри ещё раз: CPU кластера загружен на треть, железо простаивает. Вернись к развилке.",
+            "en": "Look again: cluster CPU is a third busy, the hardware is idling. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Деградация: в Listing течёт память",
+            "en": "Degradation: Listing is leaking memory"
+          },
+          "correct": false,
+          "chart": "heap",
+          "result": {
+            "ru": "Верно, heap ровный: утечки нет. Вернись к развилке.",
+            "en": "Right, the heap is flat: there is no leak. Back to the fork."
+          },
+          "degraded": false,
+          "miss": {
+            "ru": "Посмотри ещё раз: heap стоит на месте, утечки нет. Вернись к развилке.",
+            "en": "Look again: the heap stays put, there is no leak. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Деградация: CPU съедают повторные запросы",
+            "en": "Degradation: retries are eating the CPU"
+          },
+          "correct": false,
+          "chart": "retries",
+          "result": {
+            "ru": "Верно, повторов стало в 20 раз больше, и они добавляют нагрузку. Помогло бы частично их погасить, но блокер не в них: новым инстансам всё так же негде стартовать. Вернись к развилке.",
+            "en": "Right, retries went up 20 times and they add load. Cutting them would help only partly, and they are not the blocker: the new instances still have nowhere to start. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: повторы выросли в 20 раз, это настоящая нагрузка. Вернись к развилке.",
+            "en": "Look again: retries went up 20 times, that is real load. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "hint": {
+        "ru": "Время ответа считают только по запросам, которые дошли до сервиса. Сколько их доходит?",
+        "en": "Response time is measured only over the requests that reach the service. How many reach it?"
+      },
+      "text": {
+        "ru": "12:07. Время ответа Listing вдруг вернулось к норме ([график](chart:p99@12:07)), хотя новых инстансов не прибавилось. Открываешь трафик Search. Что видишь?",
+        "en": "12:07. Listing response time is suddenly back to normal ([chart](chart:p99@12:07)), though no new instances have come up. You open Search traffic. What do you see?"
+      },
+      "chart": "traffic@12:07",
+      "options": [
+        {
+          "text": {
+            "ru": "Деградация: трафик упал ниже вчерашнего, запросы не доходят",
+            "en": "Degradation: traffic fell below yesterday, requests are not getting through"
+          },
+          "correct": true,
+          "chart": "opbox@12:07",
+          "result": {
+            "ru": "Да. Лёг фронтенд: инстансы Opbox не успевали отчитаться о здоровье, и в 12:05 кластер начал их убивать. Бэкенду полегчало, потому что до него почти никто не доходит. Сайт лежит.",
+            "en": "Yes. The frontend is down: Opbox instances failed to report their health in time, and at 12:05 the cluster started killing them. The backend got relief because almost nobody reaches it. The site is down."
+          }
+        },
+        {
+          "text": {
+            "ru": "Всё в порядке: пик прошёл, сервис восстановился",
+            "en": "All fine: the peak is over, the service has recovered"
+          },
+          "correct": false,
+          "chart": "opbox@12:07",
+          "result": {
+            "ru": "Верно, ничего не восстановилось: здоровых инстансов Opbox почти не осталось, страницы рендерить некому. Вернись к развилке.",
+            "en": "Right, nothing has recovered: there are almost no healthy Opbox instances left, nobody is rendering pages. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: здоровых инстансов Opbox почти не осталось. Вернись к развилке.",
+            "en": "Look again: almost no healthy Opbox instances are left. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Всё в порядке: масштабирование наконец сработало",
+            "en": "All fine: scaling has finally worked"
+          },
+          "correct": false,
+          "chart": "instances@12:07",
+          "result": {
+            "ru": "Верно, не сработало: запрошено 90, работает по-прежнему 56. Вернись к развилке.",
+            "en": "Right, it has not: 90 requested, still 56 running. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: запущенных инстансов столько же, сколько в 11:57. Вернись к развилке.",
+            "en": "Look again: the running count is the same as at 11:57. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "12:07. Фронтенд лежит, а Listing и Search не могут вырасти: место в их части кластера зарезервировано, хотя CPU простаивает. Что делаешь?",
+        "en": "12:07. The frontend is down, and Listing and Search cannot grow: the room in their part of the cluster is reserved, though the CPU is idle. What do you do?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Гашу некритичные сервисы и добавляю ресурсы в кластер",
+            "en": "Shut down non-critical services and add resources to the cluster"
+          },
+          "correct": true,
+          "chart": "instances@12:20",
+          "result": {
+            "ru": "Да. Незадолго до 12:15 в кластер начали добавлять ресурсы и гасить некритичные сервисы, чтобы освободить CPU и память. Новые инстансы наконец сели на ноды. Около 12:20 Allegro снова отвечает: недоступность длилась около 20 минут.",
+            "en": "Yes. Shortly before 12:15 the team started adding resources to the cluster and shutting down non-critical services to free CPU and memory. The new instances finally landed on nodes. Around 12:20 Allegro responds again: it was unavailable for about 20 minutes."
+          }
+        },
+        {
+          "text": {
+            "ru": "Жду, пока автоскейлер догонит",
+            "en": "Wait for the autoscaler to catch up"
+          },
+          "correct": false,
+          "chart": "wait",
+          "result": {
+            "ru": "Верно, ничего не меняется: автоскейлер просит инстансы, но места для них нет. Вернись к развилке.",
+            "en": "Right, nothing changes: the autoscaler asks for instances, but there is no room for them. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: запущенных инстансов так и 56. Вернись к развилке.",
+            "en": "Look again: still 56 instances running. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Перезапускаю Opbox",
+            "en": "Restart Opbox"
+          },
+          "correct": false,
+          "chart": "opboxrestart",
+          "result": {
+            "ru": "Верно, не помогло: новые инстансы Opbox под нагрузкой почти сразу перестают отвечать, и кластер их снова убивает. Вернись к развилке.",
+            "en": "Right, it did not help: new Opbox instances stop responding almost at once under load, and the cluster kills them again. Back to the fork."
+          },
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: поднятые инстансы через минуту снова нездоровы. Вернись к развилке.",
+            "en": "Look again: a minute after coming up the instances are unhealthy again. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Чиню circuit breaker: порог слишком высокий",
+            "en": "Fix the circuit breaker: its threshold is too high"
+          },
+          "correct": false,
+          "chart": "breaker",
+          "result": {
+            "ru": "Верно, повторы упали: это снимает лишнюю нагрузку и помогло бы частично. Но блокер не снят: новым инстансам всё так же негде стартовать. Вернись к развилке.",
+            "en": "Right, retries dropped: that removes extra load and would help partly. But the blocker stays: the new instances still have nowhere to start. Back to the fork."
+          },
+          "degraded": false,
+          "miss": {
+            "ru": "Посмотри ещё раз: повторы упали почти до нуля, вреда на графике нет. Вернись к развилке.",
+            "en": "Look again: retries dropped to almost zero, the chart shows no harm. Back to the fork."
+          }
+        }
+      ]
+    }
+  ],
+  "outro": {
+    "ru": "Причиной стали резервации. При деплое каждый инстанс заявляет, сколько ядер и памяти ему нужно, и кластер держит это за ним, даже если он столько не потребляет. Из-за ошибки в конфигурации часть сервисов резервировала намного больше, чем ела. К 11:58 почти всё место в части кластера под Listing и Search было зарезервировано при малой реальной загрузке ([CPU](chart:cluster)), а в других частях кластера CPU и память простаивали. Трафик на пике вырос до 200–300 % от вчерашнего ([трафик](chart:traffic)), потоки Undertow упёрлись в потолок ([потоки](chart:threads)), а новые инстансы не могли стартовать ([инстансы](chart:instances)). Потом начал падать фронтенд Opbox, и в 12:05 кластер стал убивать его инстансы. Позже в разборе нашли и усилители: retries без работающего circuit breaker (его порог был выше, чем нагрузка дошла даже в аварию), неполное покрытие rate limiter’ами, пустую страницу с внутренним retry и ботов, которых было очень много.\n\nНезадолго до 12:15 в кластер добавили ресурсы и погасили некритичные сервисы, около 12:20 Allegro снова отвечал. Главное действие по итогам — поменять подход кластера к резервациям, чтобы неиспользуемые ресурсы не выпадали из пула. Плюс настройка пулов потоков и соединений, retry-политик, circuit breaker’ов и быстрый старт Opbox под нагрузкой.\n\nДля нагрузочника: тест одного сервиса на выделенном стенде такое не ловит. Проверяйте сам scale out: дайте рост трафика и смотрите, сколько инстансов реально поднялось, а не сколько запрошено. Сравнивайте reserved и used по кластеру: большой разрыв — это мёртвая ёмкость. И когда latency вдруг падает в разгар аварии, сначала смотрите на throughput: возможно, до сервиса просто перестали доходить запросы ([время ответа](chart:p99)).",
+    "en": "The cause was reservations. On deploy every instance declares how many cores and how much memory it needs, and the cluster holds that for it even if it never uses it. Because of a misconfiguration some services reserved far more than they consumed. By 11:58 almost all room in the part of the cluster provisioned for Listing and Search was reserved while real usage was low ([CPU](chart:cluster)), and in other parts of the cluster CPU and memory sat idle. At the peak traffic grew to 200–300% of yesterday ([traffic](chart:traffic)), Undertow threads hit their ceiling ([threads](chart:threads)), and new instances could not start ([instances](chart:instances)). Then the Opbox frontend began to fail, and at 12:05 the cluster started killing its instances. The postmortem also found amplifiers: retries with no working circuit breaker (its threshold was higher than even this outage reached), incomplete rate limiter coverage, a blank page with a built-in retry, and lots of bots.\n\nShortly before 12:15 the team added resources to the cluster and shut down non-critical services; around 12:20 Allegro was responding again. The main follow-up is changing how the cluster reserves resources, so unused ones do not drop out of the pool. Plus tuning thread and connection pools, retry policies, circuit breakers, and making Opbox start fast under load.\n\nFor load testers: testing one service on a dedicated rig will not catch this. Test scale-out itself: ramp the traffic and watch how many instances actually came up, not how many were requested. Compare reserved and used across the cluster: a large gap is dead capacity. And when latency suddenly drops in the middle of an outage, check throughput first: requests may simply have stopped reaching the service ([response time](chart:p99))."
+  },
+  "charts": {
+    "traffic": {
+      "title": {
+        "ru": "Search: трафик к вчерашнему",
+        "en": "Search: traffic vs yesterday"
+      },
+      "unit": "%",
+      "x": [
+        "11:40",
+        "11:41",
+        "11:42",
+        "11:43",
+        "11:44",
+        "11:45",
+        "11:46",
+        "11:47",
+        "11:48",
+        "11:49",
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02",
+        "12:03",
+        "12:04",
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "успешные",
+            "en": "successful"
+          },
+          "values": [
+            110,
+            113,
+            116,
+            119,
+            122,
+            125,
+            130,
+            135,
+            140,
+            145,
+            150,
+            158,
+            167,
+            175,
+            190,
+            205,
+            225,
+            245,
+            250,
+            240,
+            215,
+            150,
+            100,
+            70,
+            56,
+            42,
+            44,
+            45,
+            42,
+            40,
+            44,
+            48,
+            75,
+            50,
+            60,
+            95,
+            102,
+            108,
+            119,
+            129,
+            140
+          ]
+        },
+        {
+          "name": {
+            "ru": "ошибки",
+            "en": "failed"
+          },
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            10,
+            45,
+            60,
+            55,
+            25,
+            8,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": {
+            "ru": "вчера",
+            "en": "yesterday"
+          },
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "threshold": true
+        }
+      ],
+      "marks": [
+        {
+          "x": "12:00",
+          "label": {
+            "ru": "акция",
+            "en": "sale"
+          }
+        }
+      ],
+      "interpolation": "linear",
+      "note": {
+        "ru": "Из разбора Allegro: в 11:50 трафик на 50 % выше вчерашнего, на пике 200–300 % в зависимости от сервиса (для Search взят верх диапазона). Форма между точками снята с графика трафика Search в разборе, где шкала скрыта. 100 % — вчерашний трафик в то же время.",
+        "en": "From the Allegro postmortem: at 11:50 traffic is 50% above yesterday, at the peak 200–300% depending on the service (the top of the range is used for Search). The shape between those points is traced from the postmortem’s Search traffic chart, whose scale is hidden. 100% is yesterday’s traffic at the same time."
+      }
+    },
+    "p99": {
+      "title": {
+        "ru": "Listing: время ответа",
+        "en": "Listing: response time"
+      },
+      "unit": "ms",
+      "x": [
+        "11:40",
+        "11:41",
+        "11:42",
+        "11:43",
+        "11:44",
+        "11:45",
+        "11:46",
+        "11:47",
+        "11:48",
+        "11:49",
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02",
+        "12:03",
+        "12:04",
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "max p99",
+            "en": "max p99"
+          },
+          "values": [
+            185,
+            184,
+            184,
+            184,
+            183,
+            182,
+            182,
+            182,
+            181,
+            180,
+            180,
+            180,
+            181,
+            181,
+            182,
+            182,
+            210,
+            830,
+            870,
+            868,
+            865,
+            850,
+            835,
+            827,
+            818,
+            810,
+            360,
+            200,
+            160,
+            152,
+            145,
+            147,
+            149,
+            151,
+            153,
+            155,
+            157,
+            159,
+            161,
+            163,
+            165
+          ]
+        },
+        {
+          "name": {
+            "ru": "avg median",
+            "en": "avg median"
+          },
+          "values": [
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            25,
+            115,
+            140,
+            135,
+            75,
+            22,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Форма снята с графика времени ответа Listing в разборе (avg median и max p99 по инстансам), шкала там скрыта, значения в мс придуманы. Иллюстрирует «response times stayed stable despite growing traffic but after reaching saturation, they increased very quickly».",
+        "en": "Shape traced from the postmortem’s Listing response time chart (avg median and max p99 across instances); its scale is hidden, the ms values are made up. Illustrates “response times stayed stable despite growing traffic but after reaching saturation, they increased very quickly”."
+      }
+    },
+    "threads": {
+      "title": {
+        "ru": "Listing: потоки Undertow на инстанс",
+        "en": "Listing: Undertow threads per instance"
+      },
+      "unit": {
+        "ru": "потоки",
+        "en": "threads"
+      },
+      "x": [
+        "11:40",
+        "11:41",
+        "11:42",
+        "11:43",
+        "11:44",
+        "11:45",
+        "11:46",
+        "11:47",
+        "11:48",
+        "11:49",
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02",
+        "12:03",
+        "12:04",
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "max по инстансам",
+            "en": "max across instances"
+          },
+          "values": [
+            14,
+            14,
+            14,
+            14,
+            15,
+            15,
+            15,
+            15,
+            15,
+            15,
+            15,
+            16,
+            16,
+            16,
+            16,
+            22,
+            34,
+            64,
+            64,
+            64,
+            64,
+            64,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6
+          ]
+        },
+        {
+          "name": {
+            "ru": "median по инстансам",
+            "en": "median across instances"
+          },
+          "values": [
+            8,
+            8,
+            8,
+            8,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            10,
+            10,
+            10,
+            10,
+            14,
+            24,
+            58,
+            64,
+            64,
+            60,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ]
+        },
+        {
+          "name": {
+            "ru": "max worker threads",
+            "en": "max worker threads"
+          },
+          "values": [
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64,
+            64
+          ],
+          "threshold": true
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Форма снята с графика «Undertow thread count in Listing service» в разборе: у всех инстансов одинаковая полка 11:57–12:01, затем обрыв. Шкала там скрыта; потолок 64 — дефолт Undertow (8 воркеров на ядро) для 8 ядер, условно.",
+        "en": "Shape traced from the postmortem’s “Undertow thread count in Listing service” chart: every instance hits the same shelf 11:57–12:01, then drops. Its scale is hidden; the ceiling of 64 is Undertow’s default (8 workers per core) for 8 cores, as an assumption."
+      }
+    },
+    "instances": {
+      "title": {
+        "ru": "Search: инстансы",
+        "en": "Search: instances"
+      },
+      "unit": {
+        "ru": "инстансы",
+        "en": "instances"
+      },
+      "x": [
+        "11:40",
+        "11:41",
+        "11:42",
+        "11:43",
+        "11:44",
+        "11:45",
+        "11:46",
+        "11:47",
+        "11:48",
+        "11:49",
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02",
+        "12:03",
+        "12:04",
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "запрошено",
+            "en": "desired"
+          },
+          "values": [
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            55,
+            55,
+            70,
+            70,
+            70,
+            80,
+            80,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90
+          ]
+        },
+        {
+          "name": {
+            "ru": "запущено",
+            "en": "running"
+          },
+          "values": [
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            40,
+            50,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            70,
+            70,
+            82,
+            90,
+            90
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "note": {
+        "ru": "Иллюстрирует «autoscaler started to spin up new instances of Search service. We manually added even more instances, but the resource reservations created previously prevented us from scaling up». Количества инстансов в разборе нет.",
+        "en": "Illustrates “autoscaler started to spin up new instances of Search service. We manually added even more instances, but the resource reservations created previously prevented us from scaling up”. The postmortem gives no instance counts."
+      }
+    },
+    "cluster": {
+      "title": {
+        "ru": "Кластер, часть под Listing и Search: CPU",
+        "en": "Cluster, Listing and Search part: CPU"
+      },
+      "unit": "%",
+      "x": [
+        "11:40",
+        "11:41",
+        "11:42",
+        "11:43",
+        "11:44",
+        "11:45",
+        "11:46",
+        "11:47",
+        "11:48",
+        "11:49",
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02",
+        "12:03",
+        "12:04",
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "reserved",
+            "en": "reserved"
+          },
+          "values": [
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            70,
+            85,
+            85,
+            93,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            98,
+            86,
+            86,
+            90,
+            90,
+            94,
+            94,
+            94
+          ]
+        },
+        {
+          "name": {
+            "ru": "used",
+            "en": "used"
+          },
+          "values": [
+            25,
+            25,
+            26,
+            26,
+            26,
+            26,
+            27,
+            27,
+            27,
+            28,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            36,
+            39,
+            40,
+            40,
+            37,
+            34,
+            30,
+            26,
+            22,
+            22,
+            22,
+            22,
+            22,
+            22,
+            23,
+            23,
+            23,
+            23,
+            23,
+            26,
+            29,
+            32,
+            33,
+            35,
+            36
+          ]
+        },
+        {
+          "name": {
+            "ru": "capacity",
+            "en": "capacity"
+          },
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "threshold": true
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Иллюстрирует «by 11:58, almost all resources in the part of the cluster provisioned for these services had been reserved even though only a fraction of the cluster’s capacity was actually used». Reserved — что инстансы заявили при деплое, used — что реально потребляют. Значения придуманы.",
+        "en": "Illustrates “by 11:58, almost all resources in the part of the cluster provisioned for these services had been reserved even though only a fraction of the cluster’s capacity was actually used”. Reserved is what instances declared at deploy time, used is what they actually consume. Values are made up."
+      }
+    },
+    "ram": {
+      "title": {
+        "ru": "Кластер, часть под Listing и Search: RAM",
+        "en": "Cluster, Listing and Search part: RAM"
+      },
+      "unit": "%",
+      "x": [
+        "11:40",
+        "11:41",
+        "11:42",
+        "11:43",
+        "11:44",
+        "11:45",
+        "11:46",
+        "11:47",
+        "11:48",
+        "11:49",
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02",
+        "12:03",
+        "12:04",
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "reserved",
+            "en": "reserved"
+          },
+          "values": [
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            72,
+            86,
+            86,
+            94,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            97,
+            85,
+            85,
+            89,
+            89,
+            93,
+            93,
+            93
+          ]
+        },
+        {
+          "name": {
+            "ru": "used",
+            "en": "used"
+          },
+          "values": [
+            34,
+            34,
+            34,
+            35,
+            35,
+            35,
+            35,
+            35,
+            36,
+            36,
+            36,
+            36,
+            36,
+            37,
+            37,
+            37,
+            38,
+            39,
+            40,
+            39,
+            39,
+            38,
+            36,
+            35,
+            33,
+            33,
+            33,
+            33,
+            33,
+            33,
+            33,
+            33,
+            33,
+            33,
+            33,
+            34,
+            36,
+            37,
+            38,
+            38,
+            38
+          ]
+        },
+        {
+          "name": {
+            "ru": "capacity",
+            "en": "capacity"
+          },
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "threshold": true
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Иллюстрирует «there were plenty of resources available in the cluster but since they were reserved, they couldn’t be assigned to any other services». Значения придуманы.",
+        "en": "Illustrates “there were plenty of resources available in the cluster but since they were reserved, they couldn’t be assigned to any other services”. Values are made up."
+      }
+    },
+    "opbox": {
+      "title": {
+        "ru": "Opbox: инстансы",
+        "en": "Opbox: instances"
+      },
+      "unit": {
+        "ru": "инстансы",
+        "en": "instances"
+      },
+      "x": [
+        "11:40",
+        "11:41",
+        "11:42",
+        "11:43",
+        "11:44",
+        "11:45",
+        "11:46",
+        "11:47",
+        "11:48",
+        "11:49",
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02",
+        "12:03",
+        "12:04",
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "healthy",
+            "en": "healthy"
+          },
+          "values": [
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            30,
+            27,
+            27,
+            24,
+            24,
+            24,
+            14,
+            6,
+            6,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            12,
+            12,
+            22,
+            22,
+            30,
+            30
+          ]
+        },
+        {
+          "name": {
+            "ru": "unhealthy",
+            "en": "unhealthy"
+          },
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            3,
+            6,
+            6,
+            6,
+            2,
+            1,
+            1,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "marks": [
+        {
+          "x": "12:05",
+          "label": {
+            "ru": "watchdog",
+            "en": "watchdog"
+          }
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "note": {
+        "ru": "Иллюстрирует «Increased response times caused some Opbox instances to not report their health status to the cluster correctly and at 12:05 the cluster started killing off unresponsive instances». Количества придуманы.",
+        "en": "Illustrates “Increased response times caused some Opbox instances to not report their health status to the cluster correctly and at 12:05 the cluster started killing off unresponsive instances”. Counts are made up."
+      }
+    },
+    "restart": {
+      "title": {
+        "ru": "Listing: время ответа",
+        "en": "Listing: response time"
+      },
+      "unit": "ms",
+      "x": [
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "max p99",
+            "en": "max p99"
+          },
+          "values": [
+            180,
+            180,
+            181,
+            181,
+            182,
+            182,
+            210,
+            830,
+            1250,
+            1400,
+            1383,
+            1367,
+            1350
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Рестарт в 11:58: холодные инстансы на пике трафика отвечают ещё медленнее. Так могло бы быть, в разборе этого нет.",
+        "en": "Restart at 11:58: cold instances at peak traffic answer even slower. This is what could have happened, not from the postmortem."
+      },
+      "marks": [
+        {
+          "x": "11:58",
+          "label": {
+            "ru": "рестарт",
+            "en": "restart"
+          }
+        }
+      ]
+    },
+    "rollback": {
+      "title": {
+        "ru": "Listing: время ответа",
+        "en": "Listing: response time"
+      },
+      "unit": "ms",
+      "x": [
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "max p99",
+            "en": "max p99"
+          },
+          "values": [
+            180,
+            180,
+            181,
+            181,
+            182,
+            182,
+            210,
+            830,
+            870,
+            868,
+            865,
+            862,
+            860
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Откат в 11:58 ничего не меняет: время ответа растёт от трафика, а не от кода. Так могло бы быть, в разборе этого нет.",
+        "en": "A rollback at 11:58 changes nothing: response time grows with traffic, not with code. This is what could have happened, not from the postmortem."
+      },
+      "marks": [
+        {
+          "x": "11:58",
+          "label": {
+            "ru": "откат",
+            "en": "rollback"
+          }
+        }
+      ]
+    },
+    "ratelimit": {
+      "title": {
+        "ru": "Search: трафик к вчерашнему",
+        "en": "Search: traffic vs yesterday"
+      },
+      "unit": "%",
+      "x": [
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "успешные",
+            "en": "successful"
+          },
+          "values": [
+            150,
+            161,
+            172,
+            183,
+            194,
+            205,
+            225,
+            245,
+            190,
+            189,
+            188,
+            186,
+            185
+          ]
+        },
+        {
+          "name": {
+            "ru": "отрезано лимитером",
+            "en": "cut by the limiter"
+          },
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            70,
+            95,
+            100,
+            105,
+            110
+          ]
+        },
+        {
+          "name": {
+            "ru": "вчера",
+            "en": "yesterday"
+          },
+          "values": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "threshold": true
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Rate limiter на весь сайт с 11:58: часть пользователей получает пустую страницу, а она сама повторяет запросы. Так могло бы быть, в разборе этого нет.",
+        "en": "A site-wide rate limiter from 11:58: some users get a blank page, and that page retries on its own. This is what could have happened, not from the postmortem."
+      },
+      "marks": [
+        {
+          "x": "11:58",
+          "label": {
+            "ru": "лимитер",
+            "en": "limiter"
+          }
+        }
+      ]
+    },
+    "crashes": {
+      "title": {
+        "ru": "Search: падения инстансов",
+        "en": "Search: instance crashes"
+      },
+      "unit": {
+        "ru": "в минуту",
+        "en": "per minute"
+      },
+      "x": [
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "падения",
+            "en": "crashes"
+          },
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "note": {
+        "ru": "Новые инстансы не падают на старте: им просто не дают запуститься. Так могло бы быть, в разборе этого нет.",
+        "en": "New instances do not crash on start: they are simply never started. This is what could have happened, not from the postmortem."
+      },
+      "yMax": 5
+    },
+    "idle": {
+      "title": {
+        "ru": "Кластер целиком: CPU",
+        "en": "Whole cluster: CPU"
+      },
+      "unit": "%",
+      "x": [
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "used",
+            "en": "used"
+          },
+          "values": [
+            27,
+            28,
+            28,
+            29,
+            29,
+            30,
+            30,
+            31,
+            31,
+            30,
+            30,
+            29,
+            29
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Иллюстрирует «lots of CPUs idling and tons of RAM laying around unused» в других частях кластера. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustrates “lots of CPUs idling and tons of RAM laying around unused” in other parts of the cluster. This is what could have happened, not from the postmortem."
+      },
+      "yMax": 100
+    },
+    "heap": {
+      "title": {
+        "ru": "Listing: JVM heap",
+        "en": "Listing: JVM heap"
+      },
+      "unit": "%",
+      "x": [
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "heap used",
+            "en": "heap used"
+          },
+          "values": [
+            52,
+            53,
+            53,
+            54,
+            54,
+            55,
+            56,
+            57,
+            58,
+            58,
+            57,
+            56,
+            56
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Память Listing ровная, утечки нет. Так могло бы быть, в разборе этого нет.",
+        "en": "Listing memory is flat, there is no leak. This is what could have happened, not from the postmortem."
+      },
+      "yMax": 100
+    },
+    "retries": {
+      "title": {
+        "ru": "Listing → Search: повторы",
+        "en": "Listing → Search: retries"
+      },
+      "unit": "rps",
+      "x": [
+        "11:50",
+        "11:51",
+        "11:52",
+        "11:53",
+        "11:54",
+        "11:55",
+        "11:56",
+        "11:57",
+        "11:58",
+        "11:59",
+        "12:00",
+        "12:01",
+        "12:02"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "retries",
+            "en": "retries"
+          },
+          "values": [
+            5,
+            6,
+            6,
+            6,
+            7,
+            8,
+            8,
+            70,
+            140,
+            160,
+            157,
+            153,
+            150
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Иллюстрирует «if the whole cluster is maxed out, retries only increase the load». Так могло бы быть, в разборе этого нет.",
+        "en": "Illustrates “if the whole cluster is maxed out, retries only increase the load”. This is what could have happened, not from the postmortem."
+      }
+    },
+    "wait": {
+      "title": {
+        "ru": "Search: инстансы",
+        "en": "Search: instances"
+      },
+      "unit": {
+        "ru": "инстансы",
+        "en": "instances"
+      },
+      "x": [
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "запрошено",
+            "en": "desired"
+          },
+          "values": [
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90,
+            90
+          ]
+        },
+        {
+          "name": {
+            "ru": "запущено",
+            "en": "running"
+          },
+          "values": [
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56,
+            56
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "note": {
+        "ru": "Без освобождения места запущенных инстансов не прибавляется. Так могло бы быть, в разборе этого нет.",
+        "en": "Without freeing room the running count does not grow. This is what could have happened, not from the postmortem."
+      }
+    },
+    "opboxrestart": {
+      "title": {
+        "ru": "Opbox: инстансы",
+        "en": "Opbox: instances"
+      },
+      "unit": {
+        "ru": "инстансы",
+        "en": "instances"
+      },
+      "x": [
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "healthy",
+            "en": "healthy"
+          },
+          "values": [
+            14,
+            6,
+            6,
+            26,
+            15,
+            6,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ]
+        },
+        {
+          "name": {
+            "ru": "unhealthy",
+            "en": "unhealthy"
+          },
+          "values": [
+            2,
+            1,
+            1,
+            0,
+            9,
+            16,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "note": {
+        "ru": "Иллюстрирует «newly started instances very quickly reached “unresponsive” status and were automatically killed». Так могло бы быть, в разборе этого нет.",
+        "en": "Illustrates “newly started instances very quickly reached ‘unresponsive’ status and were automatically killed”. This is what could have happened, not from the postmortem."
+      },
+      "marks": [
+        {
+          "x": "12:08",
+          "label": {
+            "ru": "рестарт",
+            "en": "restart"
+          }
+        }
+      ]
+    },
+    "breaker": {
+      "title": {
+        "ru": "Listing → Search: повторы",
+        "en": "Listing → Search: retries"
+      },
+      "unit": "rps",
+      "x": [
+        "12:05",
+        "12:06",
+        "12:07",
+        "12:08",
+        "12:09",
+        "12:10",
+        "12:11",
+        "12:12",
+        "12:13",
+        "12:14",
+        "12:15",
+        "12:16",
+        "12:17",
+        "12:18",
+        "12:19",
+        "12:20"
+      ],
+      "series": [
+        {
+          "name": {
+            "ru": "retries",
+            "en": "retries"
+          },
+          "values": [
+            60,
+            58,
+            57,
+            55,
+            6,
+            6,
+            6,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            4,
+            4,
+            4
+          ]
+        }
+      ],
+      "illustrative": true,
+      "interpolation": "linear",
+      "note": {
+        "ru": "Circuit breaker с рабочим порогом с 12:08 гасит повторы. Так могло бы быть, в разборе этого нет.",
+        "en": "A circuit breaker with a working threshold cuts retries from 12:08. This is what could have happened, not from the postmortem."
+      },
+      "marks": [
+        {
+          "x": "12:08",
+          "label": {
+            "ru": "breaker",
+            "en": "breaker"
+          }
+        }
+      ]
+    }
+  }
+}
+  </script>
+  <script src="../player.js"></script>
+</body>
+</html>
