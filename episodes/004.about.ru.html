@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Что такое Buildkite</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <div class="bar"><a href="004.html?lang=ru">← К эпизоду</a><a class="lang" href="004.about.en.html">EN</a></div>
+    <h1>Что такое Buildkite</h1>
+    <p><a href="https://buildkite.com">Buildkite</a> — CI/CD-сервис из Мельбурна, Австралия: он запускает сборки и тесты на каждый коммит и pull request и показывает их результаты. Компанию основали в 2013 году Кит Питт и Тим Лукас.</p>
+    <p>Для эпизода важно три вещи:</p>
+    <ul>
+      <li><b>Гибридная модель.</b> Сами сборки идут не у Buildkite, а на серверах клиентов: там работает <code>buildkite-agent</code>, который забирает задачи и отправляет логи через Agent API. У Buildkite остаются дашборд, API и база с историей сборок и логами.</li>
+      <li><b>Маленькая команда и часовые пояса.</b> В 2016 году разбор подписали трое: Кит, Тим и Сэм, все в Мельбурне. Крупнейшие клиенты — в США, так что их рабочий понедельник приходится на мельбурнскую ночь.</li>
+      <li><b>Всё в AWS.</b> Сервис работал в AWS на кредитах программы AWS Activate для стартапов, и рост закрывали покупкой железа помощнее. За две недели до аварии выяснилось, что кредиты кончаются.</li>
+    </ul>
+  </main>
+</body>
+</html>
