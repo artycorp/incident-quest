@@ -3,13 +3,13 @@
     ru: { step: 'Шаг', next: 'Дальше', reveal: 'Что было на самом деле', source: 'Источник',
           mistakes: n => n ? `Тупиков по пути: ${n}` : 'Ни одного тупика — отличное расследование!',
           now: 'сейчас', illustrativeShort: 'иллюстрация', illustrative: 'Иллюстрация: в источнике нет цифр, значения придуманы по описанию в тексте.', back: '← Все выпуски', toEpisode: '← К выпуску', empty: 'Выпусков пока нет.',
-          noChart: 'График не найден.', checkQ: 'Что видишь на графике?',
+          noChart: 'График не найден.', checkQ: 'Что видишь на графике?', checkTermQ: 'Что видишь в терминале?', checkBothQ: 'Что видишь?', contrast: 'Для сравнения, так выглядела бы деградация:',
           checkOk: 'Всё в порядке, вернуться к развилке', checkBad: 'Есть деградация',
           hint: 'Подсказка', hints: n => `Подсказок: ${n}` },
     en: { step: 'Step', next: 'Next', reveal: 'What really happened', source: 'Source',
           mistakes: n => n ? `Dead ends on the way: ${n}` : 'No dead ends — great investigation!',
           now: 'now', illustrativeShort: 'illustration', illustrative: 'Illustration: the source has no numbers, values are made up from the description.', back: '← All episodes', toEpisode: '← Back to episode', empty: 'No episodes yet.',
-          noChart: 'Chart not found.', checkQ: 'What does the chart show?',
+          noChart: 'Chart not found.', checkQ: 'What does the chart show?', checkTermQ: 'What does the terminal show?', checkBothQ: 'What do you see?', contrast: 'For comparison, this is what a degradation would look like:',
           checkOk: 'All fine, back to the fork', checkBad: 'Degradation',
           hint: 'Hint', hints: n => `Hints used: ${n}` },
   };
@@ -135,7 +135,65 @@
     return panel(ep, ep.charts[id], until, { threshold, href });
   }
 
+  function terminal(ep, id) {
+    const term = ep.terminals[id];
+    const fig = el('figure', 'terminal');
+    const bar = el('div', 'term-bar');
+    bar.append(el('i'), el('i'), el('i'), el('span', null, t(term.title)));
+    if (term.illustrative) {
+      const badge = el('span', 'illustrative', UI[lang].illustrativeShort);
+      badge.title = UI[lang].illustrative;
+      bar.append(badge);
+    }
+    const pre = el('pre');
+    const line = text => {
+      if (!text.startsWith('$ ')) return [`${text}\n`];
+      const cmd = el('span', 'cmd', text.slice(2));
+      cmd.prepend(el('span', 'prompt', '$ '));
+      return [cmd, '\n'];
+    };
+    term.lines.forEach(text => pre.append(...line(text)));
+    pre.append(el('span', 'prompt', '$ '), el('span', 'caret'));
+    fig.append(bar, pre);
+    if (!typed.has(id) && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      typed.add(id);
+      setTimeout(() => typeOut(pre, term.lines, line));
+    }
+    return fig;
+  }
+
+  const typed = new Set();
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function typeOut(pre, lines, line) {
+    pre.style.minHeight = `${pre.offsetHeight}px`;
+    const caret = el('span', 'caret');
+    pre.replaceChildren(caret);
+    for (const text of lines) {
+      if (!pre.isConnected) return;
+      if (!text.startsWith('$ ')) {
+        caret.before(...line(text));
+        await sleep(70);
+        continue;
+      }
+      const cmd = el('span', 'cmd');
+      cmd.append(el('span', 'prompt', '$ '));
+      pre.append(cmd, caret);
+      await sleep(400);
+      const pace = Math.min(48, 1500 / text.length);
+      for (const ch of text.slice(2)) {
+        if (!pre.isConnected) return;
+        cmd.append(ch);
+        await sleep(pace * (0.6 + Math.random() * 0.8));
+      }
+      await sleep(350);
+      caret.before('\n');
+    }
+    pre.append(el('span', 'prompt', '$ '), caret);
+  }
+
   function playEpisode(ep) {
+    const evidence = (o, hint) => [...(o.terminal ? [terminal(ep, o.terminal)] : []), ...(o.chart ? [inlineChart(ep, o.chart, hint)] : [])];
+    const checkQ = o => UI[lang][o.terminal ? (o.chart ? 'checkBothQ' : 'checkTermQ') : 'checkQ'];
     const mistakes = () => state.steps.reduce((n, st) => n + st.tried.length - 1, 0);
     const hints = () => state.steps.filter(st => st.hint).length;
     const state = { step: 0, steps: ep.steps.map(s => ({ order: shuffle(s.options.length), tried: [], checks: {}, solved: false, hint: false })) };
@@ -169,7 +227,8 @@
           };
           box.append(h);
         }
-        const pending = st.tried.some(j => s.options[j].chart && !s.options[j].correct && !(j in st.checks));
+        const shown = o => o.chart || o.terminal;
+        const pending = st.tried.some(j => shown(s.options[j]) && !s.options[j].correct && !(j in st.checks));
         for (const j of st.solved ? st.tried : st.order) {
           const o = s.options[j], tried = st.tried.includes(j);
           const b = el('button', 'option', t(o.text));
@@ -184,12 +243,12 @@
           box.append(b);
           if (!tried) continue;
           const r = el('div', `result ${o.correct ? 'right' : 'wrong'}`);
-          if (o.correct || !o.chart) {
+          if (o.correct || !shown(o)) {
             paras(t(o.result), r);
-            if (o.chart) r.append(inlineChart(ep, o.chart, st.hint));
+            r.append(...evidence(o, st.hint));
           } else {
             const said = st.checks[j];
-            r.append(inlineChart(ep, o.chart, st.hint), el('p', null, UI[lang].checkQ));
+            r.append(...evidence(o, st.hint), el('p', null, checkQ(o)));
             for (const bad of [false, true]) {
               const c = el('button', 'option check', bad ? UI[lang].checkBad : UI[lang].checkOk);
               c.disabled = said !== undefined;
@@ -202,6 +261,7 @@
               r.append(c);
             }
             if (said !== undefined) paras(t(said === !!o.degraded ? o.result : o.miss), r);
+            if (said !== undefined && o.contrast) r.append(el('p', null, UI[lang].contrast), ...evidence(o.contrast, st.hint));
           }
           box.append(r);
         }
@@ -390,7 +450,7 @@
       series: [
         { label: time ? 'time' : t(c.xLabel ?? ''), value: (u, v) => v == null ? '—' : time ? hhmm(v) : v },
         ...c.series.map((s, i) => ({
-          label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: true,
+          label: t(s.name), stroke: colors[i % colors.length], width: 2, spanGaps: false,
           ...(c.interpolation === 'step' && { paths: uPlot.paths.stepped({ align: 1 }) }),
           ...(c.illustrative && { dash: [8, 5] }),
           ...(threshold && s.threshold && { stroke: css('--threshold'), dash: [10, 6] }),

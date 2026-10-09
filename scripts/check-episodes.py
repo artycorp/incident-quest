@@ -119,6 +119,12 @@ def check_episode(path):
         errors.append(f"{ep_id} source: needs title and https url")
     for cid, c in charts.items():
         check_chart(ep_id, cid, c)
+    terminals = ep.get("terminals", {})
+    for tid, term in terminals.items():
+        text(ep_id, f"terminals.{tid}.title", term.get("title"))
+        lines = term.get("lines")
+        if not lines or not all(isinstance(x, str) for x in lines):
+            errors.append(f"{ep_id} terminals.{tid}: lines must be a non-empty list of strings")
 
     steps = ep.get("steps", [])
     if not 3 <= len(steps) <= 5:
@@ -139,17 +145,38 @@ def check_episode(path):
             ow = f"{where}.options[{i}]"
             text(ep_id, f"{ow}.text", o.get("text"))
             text(ep_id, f"{ow}.result", o.get("result"))
-            if not o.get("chart"):
-                errors.append(f"{ep_id} {ow}: missing chart")
+            if not o.get("chart") and not o.get("terminal"):
+                errors.append(f"{ep_id} {ow}: needs a chart, a terminal, or both")
                 continue
-            chart_ref(ep_id, f"{ow}.chart", o["chart"])
+            shown = {}
+            if o.get("terminal"):
+                shown["terminal"] = terminals.get(o["terminal"])
+                if shown["terminal"] is None:
+                    errors.append(f"{ep_id} {ow}: unknown terminal {o['terminal']!r}")
+                    continue
+            if o.get("chart"):
+                chart_ref(ep_id, f"{ow}.chart", o["chart"])
+                shown["chart"] = charts.get(o["chart"].partition("@")[0], {})
             if not o.get("correct"):
                 if not isinstance(o.get("degraded"), bool):
                     errors.append(f"{ep_id} {ow}: wrong option needs \"degraded\": true/false")
                 text(ep_id, f"{ow}.miss", o.get("miss"))
-                c = charts.get(o["chart"].partition("@")[0], {})
-                if not c.get("illustrative"):
-                    errors.append(f"{ep_id} {ow}: wrong-option chart must be illustrative")
+                for kind, item in shown.items():
+                    if not item.get("illustrative"):
+                        errors.append(f"{ep_id} {ow}: wrong-option {kind} must be illustrative")
+            if "contrast" in o:
+                c = o["contrast"]
+                if o.get("correct") or o.get("degraded") is not False:
+                    errors.append(f"{ep_id} {ow}: \"contrast\" only on wrong options with \"degraded\": false")
+                if not isinstance(c, dict) or not (c.get("chart") or c.get("terminal")) or set(c) - {"chart", "terminal"}:
+                    errors.append(f"{ep_id} {ow}.contrast: needs a chart, a terminal, or both")
+                    continue
+                items = {"chart": charts.get(c.get("chart")), "terminal": terminals.get(c.get("terminal"))}
+                for kind, cid in c.items():
+                    if items[kind] is None:
+                        errors.append(f"{ep_id} {ow}.contrast: unknown {kind} {cid!r}")
+                    elif not items[kind].get("illustrative"):
+                        errors.append(f"{ep_id} {ow}.contrast: {kind} must be illustrative")
         if n == 1:
             if s.get("chart") or len(opts) != 4:
                 errors.append(f"{ep_id} {where}: the quiz step has no chart and 4 options")

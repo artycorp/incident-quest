@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What is Buildkite</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <div class="bar"><a href="004.html?lang=en">← Back to episode</a><a class="lang" href="004.about.ru.html">RU</a></div>
+    <h1>What is Buildkite</h1>
+    <p><a href="https://buildkite.com">Buildkite</a> is a CI/CD service from Melbourne, Australia: it runs builds and tests for every commit and pull request and shows the results. Keith Pitt and Tim Lucas founded the company in 2013.</p>
+    <p>Three things matter for this episode:</p>
+    <ul>
+      <li><b>Hybrid model.</b> Builds do not run at Buildkite but on the customers’ own machines, where <code>buildkite-agent</code> picks up jobs and ships logs through the Agent API. Buildkite keeps the dashboard, the APIs and the database with build history and logs.</li>
+      <li><b>A small team across time zones.</b> In 2016 the postmortem was signed by three people, Keith, Tim and Sam, all in Melbourne. The largest customers are in the US, so their Monday working day falls in the Melbourne night.</li>
+      <li><b>All on AWS.</b> The service ran on AWS on startup credits from the AWS Activate program, and growth was handled by buying bigger hardware. Two weeks before the outage the team found out the credits were about to run out.</li>
+    </ul>
+  </main>
+</body>
+</html>

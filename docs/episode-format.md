@@ -65,8 +65,9 @@ Rules:
 - **Hints.** A hard step may carry `hint`, which adds a one-use Hint button; chart steps come first, then the hypothesis and root-cause steps. A hint points where to look using only facts already on the page, and leaves the conclusion to the reader. After the hint, `threshold` series on that step's charts turn into a red dashed Grafana threshold, the hint's reward; the uncut `chart.html` always shows them. The reveal counts hints next to dead ends.
 - **Dead ends.** A wrong option's `result` is 1–2 sentences: a plausible consequence of that action, written as what *would* happen, and it ends by sending the reader back to the fork. Make wrong options tempting — they are what a competent engineer might try first.
 - **Correct results** explain in 1–3 sentences why this was the right move and what it revealed, leading into the next step.
-- **Result charts.** Every option — correct and wrong — has `"chart": "<id>@<moment>"` (or `"<id>"` for a what-would-happen chart). A correct option shows its `result`, then the chart with the evidence it revealed, cut at the story's moment.
+- **Result charts.** Every option — correct and wrong — has `"chart": "<id>@<moment>"` (or `"<id>"` for a what-would-happen chart). A correct option shows its `result`, then the chart with the evidence it revealed, cut at the story's moment. An option where the on-call runs a shell command shows `"terminal": "<id>"`, instead of the chart or above it (see *Terminals*).
 - **Wrong-option check.** A wrong option shows its chart first and asks "What does the chart show?": "All fine, back to the fork" or "Degradation". Set `"degraded"` to the true answer: `false` when the action changes nothing (CPU idle, GC pauses flat, queries fast), `true` when the chart shows harm (p99 back up after a restart, connections at `max_connections`). A right answer shows `result`; a wrong one shows `miss` (`{ "ru", "en" }`, 1–2 sentences): what the chart actually shows, ending "back to the fork". Wrong-option charts are invented, so they are always illustrative and their `note` says so.
+- **Contrast.** A wrong option with `"degraded": false` also gets `"contrast": { "chart": "<id>" }` (or `"terminal"`, or both): what the suspected degradation would have looked like on the same panel or command — disk running out, sessions piling up on a lock, `dig` timing out. It shows after the reader answers the check, under "For comparison, this is what a degradation would look like:", so the reader learns the healthy and the broken picture side by side. Same title, axes and window as the option's chart where possible; illustrative, with a `note` that names the failure.
 - **Title** names the mystery, never the mechanism, in the manner of an Agatha Christie novel: "Тайна полуночной корзины" / "The Mystery of the Midnight Cart", "Убийство в us-east-1" / "Murder in us-east-1". Test: a reader who sees only the title cannot guess the root cause. Words like pool, threads, retry, limit, GC stay out of it. The Christie style is for the title only; the rest of the text is plain and factual.
 - **Intro** sets the scene in 2–4 sentences: the service, the time, the first symptom. The company may be named.
 - **Outro** is "what really happened": the actual root cause, mitigation, and the lesson for load testing (what test or metric would have caught it). 1–3 paragraphs.
@@ -102,6 +103,35 @@ Format:
 - `marks` are vertical event lines (deploy, page, mitigation) with a short label.
 - Up to 3 series per chart. Check each chart via `chart.html?ep=NNN&id=<id>` during the *Check* step.
 
+## Terminals
+
+A terminal window replaces the chart only when the option's action is running a shell command on a Linux box: `dig`, `nc`, `curl -v`, `ping`, `ss`, `psql`, `kubectl`, `aws ...`. Anything the on-call would read on a dashboard (latency, CPU, connections, servers in rotation) stays a chart. Do not add a terminal just to make an option look different.
+
+An option has a `"chart"`, a `"terminal"`, or both. Use both only when they show different things: the terminal is the action and what the console printed right away (`aws ec2 terminate-instances`, then `aws elb describe-instance-health`), the chart is how the system moved over time after it. The terminal comes first, then the chart. If the terminal would only repeat the chart, keep the chart alone. On a wrong option the check question becomes "What does the terminal show?" for a terminal alone and "What do you see?" for both.
+
+```json
+"options": [
+  { "text": { "ru": "Проверяю DNS", "en": "Check DNS" }, "correct": false, "terminal": "dig", ... }
+],
+"terminals": {
+  "dig": {
+    "title": { "ru": "Терминал дежурного, 21:05", "en": "On-call terminal, 21:05" },
+    "illustrative": true,
+    "lines": [
+      "$ dig buildkite.com +noall +answer +stats",
+      "buildkite.com.          60      IN      A       203.0.113.24",
+      ";; Query time: 23 msec"
+    ]
+  }
+}
+```
+
+- `lines` are plain strings; a line starting with `$ ` is a command and is highlighted, the rest is output. Align columns with spaces, not tabs.
+- The player types each command out character by character and then prints its output line by line, once per terminal; with reduced motion it shows the result at once. Keep a terminal to 1–3 commands and about 10 lines so the animation stays short.
+- The output looks like the real tool of the incident's year: flags that existed then, the real output format, a timestamp at the story's moment. Use documentation addresses (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`) for anything the source does not give; never invent a real-looking IP, region or hostname.
+- A terminal on a wrong option is invented, so it is `"illustrative": true` and shows the "Illustration" badge. A terminal whose output is quoted from the source omits the flag.
+- The terminal follows the spoiler rules for charts: it shows only what the command would print at that moment, and its title names the moment, not the answer.
+
 ## PR body
 
 ```markdown
@@ -114,6 +144,12 @@ Made up, not from the source — review these values (every wrong-option chart i
 - `<chart id>` — illustrates "<quoted sentence from the source>"; values: <one-line summary, e.g. "flat ~1200 rps">
 
 (or "None — every chart is sourced.")
+
+## Terminals
+
+- `<terminal id>` — `<command>`; output: <one-line summary, e.g. "two A records, 23 ms">
+
+(or "None.")
 
 ## Sourced charts
 
