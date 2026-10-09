@@ -171,7 +171,7 @@ Made up, not from the source — review these values (every wrong-option chart i
 
 <teaser: 2–4 sentences with the hook from the intro, no spoilers>
 
-<base URL>episodes/NNN.html?lang=ru
+<base URL>episodes/NNN.html?lang=ru&utm_source=telegram
 
 ## Quiz poll
 
@@ -187,5 +187,7 @@ Explanation: <≤200 chars, shown after answering; no full spoiler of the root c
 
 <post: hook, 1-paragraph setup, the step 1 question, invitation to play, 3–5 hashtags>
 
-<base URL>episodes/NNN.html?lang=en
+<base URL>episodes/NNN.html?lang=en&utm_source=linkedin
 ```
+
+`utm_source` tells the readers' source apart in Umami: the Telegram app sends no referrer.

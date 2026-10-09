@@ -49,6 +49,14 @@ def chart_ref(ep_id, where, ref):
         errors.append(f"{ep_id} {where}: unknown chart {cid!r}")
     elif moment and moment not in [str(x) for x in c.get("x", [])]:
         errors.append(f"{ep_id} {where}: moment {moment} is not in chart {cid!r} x")
+    elif moment and c.get("interpolation") == "step":
+        i = [str(x) for x in c["x"]].index(moment)
+        for s in c.get("series", []):
+            vs = s.get("values", [])
+            top = max([abs(v) for v in vs if v is not None] + [c.get("yMax", 0)])
+            if i and i < len(vs) and None not in vs[i - 1:i + 1] and abs(vs[i] - vs[i - 1]) > 0.25 * top:
+                warnings.append(f"{ep_id} {where}: {t_en(s['name'])} changes at {moment}, under the now line; "
+                                f"cut a little after the change")
 
 
 def check_chart(ep_id, cid, c):
@@ -109,6 +117,11 @@ def check_episode(path):
     for suffix in (".post.md", ".arch.ru.html", ".arch.en.html"):
         if not (EPISODES / f"{ep_id}{suffix}").exists():
             errors.append(f"{ep_id}: missing {ep_id}{suffix}")
+    post = EPISODES / f"{ep_id}.post.md"
+    if int(ep_id) >= 5 and post.exists():
+        for src in ("telegram", "linkedin"):
+            if f"utm_source={src}" not in post.read_text():
+                errors.append(f"{ep_id}.post.md: link without utm_source={src}")
 
     charts.clear()
     charts.update(ep.get("charts", {}))

@@ -6,6 +6,7 @@ Site: plain static HTML served by GitHub Pages from `master`. Merging a PR publi
 
 - **Episode JSON, charts, hints, service diagram, post and PR body**: `docs/episode-format.md`. Read it before writing or reviewing an episode.
 - **Review rules** (spoilers, hints, chart realism, `player.js`): `CODING_STANDARDS.md`.
+- **Analytics**: `scripts/umami-report.py` builds an episode report from the Umami data export zip (website settings → Data → Export).
 
 ## Producing an episode
 
@@ -25,7 +26,7 @@ Steps:
 5. **Draw the service diagram** following *Service diagram*.
 6. **Write `episodes/NNN.post.md`** following *Post format*.
 7. **Mark** the incident in `sources.md` as `NNN`.
-8. **Check.** Run `python3 serve.py` and play `http://localhost:8000/episodes/NNN.html` to the end in both languages. Done when every option responds, every chart link opens a drawn chart, every hint button shows its hint (and turns `threshold` series red on that step's charts), and the reveal shows the source link.
+8. **Check.** Run `python3 serve.py` and play `http://localhost:8000/episodes/NNN.html` to the end in both languages. Done when every option responds, a screenshot of every chart link at its moment shows the signal its step or result claims, every hint button shows its hint (and turns `threshold` series red on that step's charts), and the reveal shows the source link.
 9. **Open the PR** titled `Episode NNN: <EN title>`, with the body from *PR body*. Leave it unmerged — the maintainer merges on publication day.
 
 ## Load-shaped
