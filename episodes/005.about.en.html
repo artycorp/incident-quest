@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What is Transloadit</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <div class="bar"><a href="005.html?lang=en">← Back to episode</a><a class="lang" href="005.about.ru.html">RU</a></div>
+    <h1>What is Transloadit</h1>
+    <p><a href="https://transloadit.com">Transloadit</a> is a media processing platform for developers (MPaaS, Media Processing as a Service): it encodes video, resizes images, and handles file imports and exports. Three engineers founded the company in 2009: Kevin van Zonneveld, Tim Koschützki and Felix Geisendörfer. The team is small and spread across several countries.</p>
+    <p>Three things matter for this episode:</p>
+    <ul>
+      <li><b>Assemblies.</b> A processing job is called an Assembly: a customer starts it through the API, and workers pick it up from a queue and run it.</li>
+      <li><b>Shared Redis.</b> A region’s queues, locks and metadata live on shared Redis servers. That is convenient, but when Redis is unavailable every role suffers at once.</li>
+      <li><b>Regions.</b> The service runs in several AWS regions; the incident hit us-east-1.</li>
+    </ul>
+  </main>
+</body>
+</html>

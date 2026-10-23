@@ -1,0 +1,3293 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Тайна безмолвных воркеров</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main id="app"></main>
+  <script type="application/json" id="episode">
+{
+  "title": {
+    "ru": "Тайна безмолвных воркеров",
+    "en": "The Mystery of the Silent Workers"
+  },
+  "dashboard": "Transloadit · us-east-1",
+  "source": {
+    "title": "Transloadit: Postmortem: US-East Incident on September 3, 2025",
+    "url": "https://transloadit.com/blog/2025/09/us-east-redis-connection-exhaustion-post-mortem/"
+  },
+  "intro": {
+    "ru": "Среда, 3 сентября 2025 года. Transloadit — платформа обработки медиа для разработчиков ([что это](005.about.ru.html)). Клиенты запускают Assemblies через API, воркеры их кодируют. Очереди, блокировки и метаданные лежат на общих серверах Redis в регионе us-east-1, рядом работают API-ноды и внутренние сервисы ([схема сервиса](005.arch.ru.html)).\n\nС полудня кодирование в регионе идёт медленно. В 19:50 UTC приходит алерт: растёт время в очереди ([график](chart:queue@19:50)) и слишком много соединений к очередям. Ты дежурный.",
+    "en": "Wednesday, September 3, 2025. Transloadit is a media processing platform for developers ([what is it](005.about.en.html)). Customers run Assemblies through an API, and workers encode them. Queues, locks and metadata live on shared Redis servers in the us-east-1 region, next to API nodes and internal services ([service diagram](005.arch.en.html)).\n\nEncoding in the region has been slow since noon. At 19:50 UTC an alert fires: queue time is climbing ([chart](chart:queue@19:50)) and there are too many connections to the queues. You are on call."
+  },
+  "steps": [
+    {
+      "text": {
+        "ru": "3 сентября, 19:50 UTC. Кодирование в us-east-1 идёт медленно с полудня, а теперь алерт: растёт время в очереди и слишком много соединений к очередям. Воркеры шлют heartbeat с перебоями. Ты дежурный. С чего начнёшь?",
+        "en": "September 3, 19:50 UTC. Encoding in us-east-1 has been slow since noon, and now an alert: queue time is climbing and there are too many connections to the queues. Worker heartbeats are flaky. You are on call. Where do you start?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Смотрю общие серверы Redis: соединения и ошибки подключения",
+            "en": "Check the shared Redis servers: connections and connect errors"
+          },
+          "correct": true,
+          "result": {
+            "ru": "Да. Redis отвечает на новые подключения `max number of clients reached`: число клиентов упёрлось в лимит `maxclients`. Воркеры и API-ноды не могут взять соединение, поэтому задачи стоят в очереди.",
+            "en": "Yes. Redis answers new connections with `max number of clients reached`: the client count has hit the `maxclients` limit. Workers and API nodes cannot get a connection, so jobs wait in the queue."
+          },
+          "chart": "clients@19:50",
+          "terminal": "redis_ping"
+        },
+        {
+          "text": {
+            "ru": "Добавляю воркеров кодирования в us-east-1",
+            "en": "Add more encoding workers in us-east-1"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, не помогло: новые воркеры тоже не могут подключиться к Redis, а их попытки только добавляют отказов. Вернись к развилке.",
+            "en": "Right, it did not help: the new workers cannot connect to Redis either, and their attempts only add refusals. Back to the fork."
+          },
+          "chart": "w_scale",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: подключённых к Redis воркеров не прибавилось. Вернись к развилке.",
+            "en": "Look again: the number of workers connected to Redis has not grown. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Перезапускаю воркеры, которые перестали отвечать",
+            "en": "Restart the workers that stopped answering"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, ненадолго: после рестарта воркеры переподключаются, очередь на минуты уменьшается, но освободившиеся слоты занимают заново, и всё возвращается. Вернись к развилке.",
+            "en": "Right, but only briefly: after the restart the workers reconnect and the queue shrinks for a few minutes, but the freed slots get taken again and everything comes back. Back to the fork."
+          },
+          "chart": "w_restart",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: за десять-пятнадцать минут время в очереди вернулось к прежнему. Вернись к развилке.",
+            "en": "Look again: within ten to fifteen minutes the queue time is back where it was. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Проверяю CPU и сеть на машинах с воркерами",
+            "en": "Check CPU and network on the worker machines"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, тут всё в порядке: процессоры воркеров почти простаивают, кодированию CPU не мешает. Вернись к развилке.",
+            "en": "Right, this part is fine: the worker CPUs are nearly idle, CPU is not what slows encoding. Back to the fork."
+          },
+          "chart": "cpu",
+          "degraded": false,
+          "miss": {
+            "ru": "Посмотри ещё раз: CPU воркеров далеко от потолка. Вернись к развилке.",
+            "en": "Look again: worker CPU is far from the ceiling. Back to the fork."
+          },
+          "contrast": {
+            "chart": "cpu_bad"
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "20:10. Redis отказывает новым подключениям, `connected_clients` упёрся в лимит. Клиентов у общих серверов три группы: воркеры, API-ноды и внутренний endpoint с высоким трафиком. Открываешь разбивку соединений по группам. Что видишь?",
+        "en": "20:10. Redis refuses new connections, and `connected_clients` is at the limit. The shared servers have three groups of clients: workers, API nodes and a high-traffic internal endpoint. You open the connections by group. What do you see?"
+      },
+      "hint": {
+        "ru": "Текущая точка — не вся история. Какая линия росла все эти часы, пока другие стояли или падали?",
+        "en": "The current point is not the whole story. Which line kept growing over these hours while the others stood still or fell?"
+      },
+      "chart": "by_client@20:10",
+      "options": [
+        {
+          "text": {
+            "ru": "Деградация: одна группа копит соединения и вытесняет остальных",
+            "en": "Degradation: one group hoards connections and crowds out the others"
+          },
+          "correct": true,
+          "result": {
+            "ru": "Да. Внутренний endpoint держит всё больше соединений, а воркерам и API-нодам Redis отказывает. Трафик-шейпер уже увёл всплеск одного клиента в резервную очередь, но соединения от этого не вернулись.",
+            "en": "Yes. The internal endpoint holds more and more connections, while Redis refuses the workers and API nodes. The traffic shaper has already moved one customer’s burst into a backup queue, but that did not give the connections back."
+          },
+          "chart": "errors@20:10"
+        },
+        {
+          "text": {
+            "ru": "Деградация: вырос трафик, и endpoint не справляется с нагрузкой",
+            "en": "Degradation: traffic grew and the endpoint cannot keep up"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, трафик ни при чём: запросов к endpoint не прибавилось, а всплеск шейпер увёл в резервную очередь. Вернись к развилке.",
+            "en": "Right, traffic is not it: the endpoint gets no more requests, and the shaper moved the burst into the backup queue. Back to the fork."
+          },
+          "chart": "rps@20:10",
+          "degraded": false,
+          "miss": {
+            "ru": "Посмотри ещё раз: запросы к endpoint ровные, роста нет. Вернись к развилке.",
+            "en": "Look again: requests to the endpoint are flat, there is no growth. Back to the fork."
+          },
+          "contrast": {
+            "chart": "rps_bad"
+          }
+        },
+        {
+          "text": {
+            "ru": "Деградация: у Redis кончается память",
+            "en": "Degradation: Redis is running out of memory"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, с памятью всё хорошо: занята примерно треть `maxmemory`, запас большой. Вернись к развилке.",
+            "en": "Right, memory is fine: about a third of `maxmemory` is used, plenty of room. Back to the fork."
+          },
+          "chart": "mem",
+          "degraded": false,
+          "miss": {
+            "ru": "Посмотри ещё раз: память занята примерно на треть. Вернись к развилке.",
+            "en": "Look again: memory is about a third full. Back to the fork."
+          },
+          "contrast": {
+            "chart": "mem_bad"
+          }
+        },
+        {
+          "text": {
+            "ru": "Деградация: Redis тормозит на медленных командах",
+            "en": "Degradation: Redis is slow on expensive commands"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, Redis отвечает быстро: p99 держится около миллисекунды. Узкое место не в командах. Вернись к развилке.",
+            "en": "Right, Redis answers fast: p99 stays around a millisecond. The bottleneck is not in the commands. Back to the fork."
+          },
+          "chart": "latency",
+          "degraded": false,
+          "miss": {
+            "ru": "Посмотри ещё раз: p99 около миллисекунды. Вернись к развилке.",
+            "en": "Look again: p99 is around a millisecond. Back to the fork."
+          },
+          "contrast": {
+            "chart": "latency_bad"
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "20:40. Видно, кто держит соединения, но почему он их не отдаёт, пока неизвестно, а очереди стоят. Сначала нужно выиграть время. Что делаешь?",
+        "en": "20:40. You can see who holds the connections, but not yet why they are not given back, and the queues are stuck. First you need to buy time. What do you do?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Временно поднимаю на Redis лимит клиентов maxclients",
+            "en": "Temporarily raise the maxclients client limit on Redis"
+          },
+          "correct": true,
+          "result": {
+            "ru": "Да. Отказы воркерам и API-нодам пошли на спад ([отказы](chart:errors@21:30)), к 21:24 всё стабилизировалось. Но клиентов у Redis уже больше прежнего лимита, и они продолжают набираться: это отсрочка, причина осталась.",
+            "en": "Yes. Refusals to the workers and API nodes began to fall ([refusals](chart:errors@21:30)), and by 21:24 everything had stabilized. But Redis now has more clients than the old limit, and they keep piling up: this is a delay, the cause is still there."
+          },
+          "chart": "clients@21:30",
+          "terminal": "limit"
+        },
+        {
+          "text": {
+            "ru": "Перезапускаю Redis, чтобы сбросить соединения",
+            "en": "Restart Redis to drop the connections"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, стало хуже: перезапуск сбрасывает очереди, блокировки и метаданные, а воркеры и API-ноды тут же переподключаются и снова забивают лимит. Вернись к развилке.",
+            "en": "Right, it got worse: the restart wipes queues, locks and metadata, and the workers and API nodes reconnect at once and fill the limit again. Back to the fork."
+          },
+          "chart": "redis_restart",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: через несколько минут клиентов снова столько же, сколько лимит. Вернись к развилке.",
+            "en": "Look again: a few minutes later the client count is back at the limit. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Переношу очереди на отдельный Redis прямо сейчас",
+            "en": "Move the queues to a separate Redis right now"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, стало хуже: перенос посреди аварии останавливает обработку на время переключения, а причина остаётся на месте. Вернись к развилке.",
+            "en": "Right, it got worse: moving the queues mid-incident stops processing during the cutover, and the cause stays in place. Back to the fork."
+          },
+          "chart": "migrate",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: пока идёт перенос, обрабатывается ноль задач. Вернись к развилке.",
+            "en": "Look again: while the move is under way, zero jobs are processed. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Откатываю последний релиз в us-east-1",
+            "en": "Roll back the latest release in us-east-1"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, откат не помог: процессы перезапустились и соединения упали, но код с утечкой остался, и за несколько минут клиенты вернулись к лимиту. Вернись к развилке.",
+            "en": "Right, the rollback did not help: the processes restarted and connections dropped, but the leaky code stayed, and within minutes the clients were back at the limit. Back to the fork."
+          },
+          "chart": "rollback",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: после падения клиенты снова вернулись к лимиту. Вернись к развилке.",
+            "en": "Look again: after the dip the clients are back at the limit. Back to the fork."
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "21:30. Система держится на поднятом лимите, но клиентов у Redis понемногу всё больше. Всплеск одного клиента шейпер уже изолировал в резервной очереди. Метрики успешных запросов к endpoint зелёные. Почему endpoint не возвращает соединения?",
+        "en": "21:30. The system holds on the raised limit, but the client count at Redis still creeps up. The shaper has already isolated one customer’s burst in a backup queue. The endpoint’s success metrics are green. Why does the endpoint not give connections back?"
+      },
+      "hint": {
+        "ru": "Все метрики endpoint смотрят на успешные запросы. Какой путь выполнения остаётся без присмотра?",
+        "en": "All the endpoint metrics look at successful requests. Which execution path is left unwatched?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Endpoint не закрывает соединение, когда запрос заканчивается ошибкой",
+            "en": "The endpoint does not close the connection when a request ends in an error"
+          },
+          "correct": true,
+          "result": {
+            "ru": "Да. На пути ошибки соединение остаётся открытым. Всплеск одного клиента дал много ошибок и вскрыл утечку, а успешный путь оставался зелёным. К 23:06 причину подтвердили.",
+            "en": "Yes. On the error path the connection stays open. One customer’s burst produced many errors and exposed the leak, while the success path stayed green. By 23:06 the cause was confirmed."
+          },
+          "chart": "leak@21:30"
+        },
+        {
+          "text": {
+            "ru": "Блокирую клиента, который прислал всплеск",
+            "en": "Block the customer who sent the burst"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, не помогло: клиент и так изолирован в резервной очереди, а уже утёкшие соединения от блокировки не закрываются. Вернись к развилке.",
+            "en": "Right, it did not help: the customer is already isolated in the backup queue, and blocking does not close connections that already leaked. Back to the fork."
+          },
+          "chart": "block",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: после блокировки клиентов столько же, и их число продолжает расти. Вернись к развилке.",
+            "en": "Look again: after the block the client count is the same and keeps growing. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Уменьшаю пул соединений у воркеров",
+            "en": "Shrink the connection pool on the workers"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, стало хуже: у воркеров соединений вдвое меньше, а освободившиеся слоты доедает endpoint. Вернись к развилке.",
+            "en": "Right, it got worse: the workers have half the connections, and the endpoint eats up the freed slots. Back to the fork."
+          },
+          "chart": "pool",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: у воркеров вдвое меньше соединений, а endpoint растёт теми же темпами. Вернись к развилке.",
+            "en": "Look again: the workers have half the connections, while the endpoint grows at the same pace. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Сеть рвёт соединения, и клиенты постоянно переподключаются",
+            "en": "The network drops connections and clients keep reconnecting"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, сеть ни при чём: на воркере 44 спокойных соединения в `estab` и всего 12 в `timewait`. Вернись к развилке.",
+            "en": "Right, the network is fine: the worker has 44 calm connections in `estab` and only 12 in `timewait`. Back to the fork."
+          },
+          "terminal": "ss",
+          "degraded": false,
+          "miss": {
+            "ru": "Посмотри ещё раз: в `estab` 44 соединения, в `timewait` всего 12. Вернись к развилке.",
+            "en": "Look again: 44 connections are in `estab` and only 12 in `timewait`. Back to the fork."
+          },
+          "contrast": {
+            "terminal": "ss_bad"
+          }
+        }
+      ]
+    },
+    {
+      "text": {
+        "ru": "23:06. Причина подтверждена: на пути ошибки endpoint не освобождает соединение. Лимит уже поднят, но соединения всё ещё утекают. Как закрыть вопрос?",
+        "en": "23:06. The cause is confirmed: on the error path the endpoint does not release the connection. The limit is already raised, but connections are still leaking. How do you close this out?"
+      },
+      "options": [
+        {
+          "text": {
+            "ru": "Выкатываю hotpatch: закрывать соединение и при ошибке, затем перезапускаю процессы",
+            "en": "Ship a hotpatch that closes the connection on errors too, then restart the processes"
+          },
+          "correct": true,
+          "result": {
+            "ru": "Да. Hotpatch освобождает соединение и при успехе, и при ошибке, а перезапуск процессов сливает уже утёкшие. После выкатки на весь флот число клиентов вернулось к норме, восстановление подтвердили в 23:06.",
+            "en": "Yes. The hotpatch releases the connection on both success and error, and the restart drains the ones that already leaked. After the fleet-wide rollout the client count returned to normal, and recovery was confirmed at 23:06."
+          },
+          "chart": "clients@23:12"
+        },
+        {
+          "text": {
+            "ru": "Перезапускаю процессы endpoint, чтобы слить соединения",
+            "en": "Restart the endpoint processes to drain the connections"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, ненадолго: процессы перезапущены, соединения сброшены, но код тот же, и утечка набирает их заново. Вернись к развилке.",
+            "en": "Right, but only briefly: the processes are restarted and connections dropped, but the code is the same and the leak refills them. Back to the fork."
+          },
+          "chart": "recycle",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: клиентов снова становится всё больше. Вернись к развилке.",
+            "en": "Look again: the client count is growing again. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Поднимаю лимит клиентов ещё выше и разбираюсь утром",
+            "en": "Raise the client limit even higher and sort it out in the morning"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, это таймер, а не лечение: лимит выше, но соединения растут тем же темпом и упираются в новый потолок. Вернись к развилке.",
+            "en": "Right, that is a timer, not a cure: the limit is higher, but connections grow at the same pace and hit the new ceiling. Back to the fork."
+          },
+          "chart": "raise_more",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: к утру клиенты снова у потолка. Вернись к развилке.",
+            "en": "Look again: by morning the clients are at the ceiling again. Back to the fork."
+          }
+        },
+        {
+          "text": {
+            "ru": "Жёстко ограничиваю частоту запросов на endpoint",
+            "en": "Hard rate-limit the endpoint"
+          },
+          "correct": false,
+          "result": {
+            "ru": "Верно, лишь половина: лимит запросов замедляет утечку, но не останавливает её, ведь каждый запрос с ошибкой всё равно оставляет соединение. Вернись к развилке.",
+            "en": "Right, only half of it: the rate limit slows the leak but does not stop it, because every failed request still leaves a connection behind. Back to the fork."
+          },
+          "chart": "ratelimit",
+          "degraded": true,
+          "miss": {
+            "ru": "Посмотри ещё раз: утечка стала медленнее, но не нулевая. Вернись к развилке.",
+            "en": "Look again: the leak is slower, but not zero. Back to the fork."
+          }
+        }
+      ]
+    }
+  ],
+  "outro": {
+    "ru": "Началось всё с утечки соединений. Внутренний endpoint с высоким трафиком не закрывал соединение к Redis, если запрос заканчивался ошибкой. Пока ошибок было мало, утечка не бросалась в глаза: метрики успешного пути были зелёными, а учёта соединений на пути ошибки не было. Один клиент прислал необычно большой всплеск запросов, ошибок стало много, и число подключённых клиентов поползло вверх ([клиенты](chart:clients), [по группам](chart:by_client), [ошибки и рост](chart:leak)).\n\nДальше сработал общий пул. Очереди, блокировки и метаданные лежали на одних серверах Redis, поэтому когда лимит соединений кончился, отказы получили все: воркеры не могли взять задачу, API-ноды не могли открыть соединение ([отказы](chart:errors), [очередь](chart:queue)). Трафик-шейпер увёл всплеск в резервную очередь и смягчил удар, но утечку не остановил. Лимит подняли, к 21:24 стало стабильно, а в 23:06 выкатили hotpatch (соединение закрывается и на пути ошибки) и перезапустили процессы, чтобы слить утёкшие. На следующий день нашлась вторая утечка, которую первый фикс не закрыл. Её поймали раньше и справились меньше чем за час.\n\nДля нагрузочника: гоняйте тест не только на успешных запросах, но и с долей ошибок и таймаутов, потому что утечка на пути ошибки видна только там. Следите за жизненным циклом соединений (`connected_clients` против `maxclients`, открыто минус закрыто) и поднимайте алерт заранее, а не на первых отказах. И проверьте радиус поражения: что будет с остальными ролями, если один потребитель займёт все слоты. Раздельные пулы Redis и бюджет соединений на endpoint ограничивают ущерб.",
+    "en": "It started with a connection leak. A high-traffic internal endpoint did not close its Redis connection when a request ended in an error. While errors were rare, the leak stayed out of sight: the success-path metrics were green, and nothing counted connections on the error path. One customer sent an unusually large burst of requests, errors multiplied, and the number of connected clients crept up ([clients](chart:clients), [by group](chart:by_client), [errors and growth](chart:leak)).\n\nThen the shared pool amplified it. Queues, locks and metadata lived on the same Redis servers, so when the connection limit ran out everyone got refusals: workers could not take a job, API nodes could not open a connection ([refusals](chart:errors), [queue](chart:queue)). The traffic shaper moved the burst into a backup queue and softened the blow, but did not stop the leak. The limit was raised, things were stable by 21:24, and at 23:06 a hotpatch went out (the connection is closed on the error path too) and the processes were restarted to drain the leaked ones. The next day a second leak turned up that the first fix had not covered. It was caught earlier and handled in under an hour.\n\nFor load testers: run the test not only on successful requests but with a share of errors and timeouts, because a leak on the error path shows up only there. Watch the connection lifecycle (`connected_clients` against `maxclients`, opened minus closed) and alert early, not on the first refusals. And check the blast radius: what happens to the other roles if one consumer takes every slot. Separate Redis pools and a per-endpoint connection budget limit the damage."
+  },
+  "terminals": {
+    "redis_ping": {
+      "title": {
+        "ru": "Терминал дежурного, 19:52",
+        "en": "On-call terminal, 19:52"
+      },
+      "illustrative": true,
+      "lines": [
+        "$ redis-cli -h 198.51.100.21 ping",
+        "(error) ERR max number of clients reached",
+        "$ redis-cli -h 198.51.100.22 ping",
+        "(error) ERR max number of clients reached"
+      ]
+    },
+    "limit": {
+      "title": {
+        "ru": "Терминал дежурного, 21:05",
+        "en": "On-call terminal, 21:05"
+      },
+      "illustrative": true,
+      "lines": [
+        "$ redis-cli -h 198.51.100.21 config set maxclients 14000",
+        "(error) ERR max number of clients reached",
+        "$ redis-cli -h 198.51.100.21 config set maxclients 14000",
+        "OK"
+      ]
+    },
+    "ss": {
+      "title": {
+        "ru": "Терминал дежурного, 21:35 (машина воркера)",
+        "en": "On-call terminal, 21:35 (a worker machine)"
+      },
+      "illustrative": true,
+      "lines": [
+        "$ ss -s",
+        "Total: 118",
+        "TCP:   61 (estab 44, closed 12, orphaned 0, timewait 12)"
+      ]
+    },
+    "ss_bad": {
+      "title": {
+        "ru": "Терминал дежурного, 21:35 (машина воркера)",
+        "en": "On-call terminal, 21:35 (a worker machine)"
+      },
+      "illustrative": true,
+      "lines": [
+        "$ ss -s",
+        "Total: 18992",
+        "TCP:   18934 (estab 46, closed 18721, orphaned 0, timewait 18700)"
+      ]
+    }
+  },
+  "charts": {
+    "queue": {
+      "title": {
+        "ru": "Assemblies: время в очереди, us-east-1",
+        "en": "Assemblies: queue time, us-east-1"
+      },
+      "unit": {
+        "ru": "мин",
+        "en": "min"
+      },
+      "x": [
+        "12:00",
+        "12:10",
+        "12:20",
+        "12:30",
+        "12:40",
+        "12:50",
+        "13:00",
+        "13:10",
+        "13:20",
+        "13:30",
+        "13:40",
+        "13:50",
+        "14:00",
+        "14:10",
+        "14:20",
+        "14:30",
+        "14:40",
+        "14:50",
+        "15:00",
+        "15:10",
+        "15:20",
+        "15:30",
+        "15:40",
+        "15:50",
+        "16:00",
+        "16:10",
+        "16:20",
+        "16:30",
+        "16:40",
+        "16:50",
+        "17:00",
+        "17:10",
+        "17:20",
+        "17:30",
+        "17:40",
+        "17:50",
+        "18:00",
+        "18:10",
+        "18:20",
+        "18:30",
+        "18:40",
+        "18:50",
+        "19:00",
+        "19:10",
+        "19:20",
+        "19:30",
+        "19:40",
+        "19:50",
+        "20:00",
+        "20:10",
+        "20:20",
+        "20:30",
+        "20:40",
+        "20:50",
+        "21:00",
+        "21:10",
+        "21:20",
+        "21:24",
+        "21:30",
+        "21:40",
+        "21:50",
+        "22:00",
+        "22:10",
+        "22:20",
+        "22:30",
+        "22:40",
+        "22:50",
+        "23:00",
+        "23:06",
+        "23:10",
+        "23:12",
+        "23:20",
+        "23:30"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "p95",
+            "en": "p95"
+          },
+          "values": [
+            2,
+            4,
+            4,
+            4,
+            4,
+            5,
+            5,
+            6,
+            5,
+            5,
+            6,
+            6,
+            7,
+            5,
+            6,
+            7,
+            6,
+            8,
+            8,
+            6,
+            6,
+            8,
+            9,
+            8,
+            7,
+            8,
+            7,
+            8,
+            9,
+            9,
+            8,
+            9,
+            9,
+            10,
+            10,
+            9,
+            11,
+            11,
+            11,
+            11,
+            12,
+            12,
+            11,
+            14,
+            16,
+            18,
+            21,
+            22,
+            26,
+            28,
+            31,
+            34,
+            36,
+            37,
+            38,
+            35,
+            30,
+            29,
+            28,
+            23,
+            18,
+            14,
+            13,
+            12,
+            10,
+            9,
+            8,
+            7,
+            6,
+            5,
+            5,
+            3,
+            1
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрирует «Slow encoding in US-East, with many queues affected» и «Higher-than-normal queue times for Assemblies». Метки времени из разбора: 12:00, 19:50, 21:24, 23:06. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustrates “Slow encoding in US-East, with many queues affected” and “Higher-than-normal queue times for Assemblies”. Timestamps from the postmortem: 12:00, 19:50, 21:24, 23:06. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "12:00",
+          "label": {
+            "ru": "медленное кодирование",
+            "en": "slow encoding"
+          }
+        },
+        {
+          "x": "19:50",
+          "label": {
+            "ru": "алерт по очереди",
+            "en": "queue alert"
+          }
+        },
+        {
+          "x": "21:24",
+          "label": {
+            "ru": "стабильно",
+            "en": "stable"
+          }
+        },
+        {
+          "x": "23:06",
+          "label": {
+            "ru": "патч",
+            "en": "patch"
+          }
+        }
+      ]
+    },
+    "clients": {
+      "title": {
+        "ru": "Redis, общие серверы: подключённые клиенты",
+        "en": "Shared Redis servers: connected clients"
+      },
+      "unit": {
+        "ru": "клиенты",
+        "en": "clients"
+      },
+      "x": [
+        "12:00",
+        "12:10",
+        "12:20",
+        "12:30",
+        "12:40",
+        "12:50",
+        "13:00",
+        "13:10",
+        "13:20",
+        "13:30",
+        "13:40",
+        "13:50",
+        "14:00",
+        "14:10",
+        "14:20",
+        "14:30",
+        "14:40",
+        "14:50",
+        "15:00",
+        "15:10",
+        "15:20",
+        "15:30",
+        "15:40",
+        "15:50",
+        "16:00",
+        "16:10",
+        "16:20",
+        "16:30",
+        "16:40",
+        "16:50",
+        "17:00",
+        "17:10",
+        "17:20",
+        "17:30",
+        "17:40",
+        "17:50",
+        "18:00",
+        "18:10",
+        "18:20",
+        "18:30",
+        "18:40",
+        "18:50",
+        "19:00",
+        "19:10",
+        "19:20",
+        "19:30",
+        "19:40",
+        "19:50",
+        "20:00",
+        "20:10",
+        "20:20",
+        "20:30",
+        "20:40",
+        "20:50",
+        "21:00",
+        "21:10",
+        "21:20",
+        "21:24",
+        "21:30",
+        "21:40",
+        "21:50",
+        "22:00",
+        "22:10",
+        "22:20",
+        "22:30",
+        "22:40",
+        "22:50",
+        "23:00",
+        "23:06",
+        "23:10",
+        "23:12",
+        "23:20",
+        "23:30"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "connected_clients",
+            "en": "connected_clients"
+          },
+          "values": [
+            3400,
+            3466,
+            3534,
+            3600,
+            3666,
+            3734,
+            3800,
+            3866,
+            3934,
+            4000,
+            4066,
+            4134,
+            4200,
+            4316,
+            4433,
+            4549,
+            4667,
+            4784,
+            4900,
+            5016,
+            5133,
+            5251,
+            5367,
+            5484,
+            5600,
+            5766,
+            5934,
+            6100,
+            6266,
+            6434,
+            6600,
+            6766,
+            6934,
+            7100,
+            7266,
+            7434,
+            7600,
+            7887,
+            8175,
+            8463,
+            8750,
+            9037,
+            9325,
+            9613,
+            9900,
+            10000,
+            10000,
+            10000,
+            9999,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            12400,
+            12480,
+            12600,
+            12673,
+            12745,
+            12819,
+            12892,
+            12965,
+            13037,
+            13110,
+            13184,
+            13256,
+            13300,
+            9434,
+            7500,
+            3500,
+            3500
+          ]
+        },
+        {
+          "name": {
+            "ru": "maxclients",
+            "en": "maxclients"
+          },
+          "values": [
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000
+          ],
+          "threshold": true
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрирует «Once those servers hit their connection limits» и «spikes in Redis `connected_clients`». Лимит в разборе временно подняли, момент и значения придуманы. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustrates “Once those servers hit their connection limits” and “spikes in Redis `connected_clients`”. The postmortem says the limit was raised temporarily; the moment and values are made up. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "21:24",
+          "label": {
+            "ru": "стабильно",
+            "en": "stable"
+          }
+        },
+        {
+          "x": "23:06",
+          "label": {
+            "ru": "патч",
+            "en": "patch"
+          }
+        }
+      ]
+    },
+    "by_client": {
+      "title": {
+        "ru": "Redis: соединения по группам клиентов",
+        "en": "Redis: connections by client group"
+      },
+      "unit": {
+        "ru": "клиенты",
+        "en": "clients"
+      },
+      "x": [
+        "12:00",
+        "12:10",
+        "12:20",
+        "12:30",
+        "12:40",
+        "12:50",
+        "13:00",
+        "13:10",
+        "13:20",
+        "13:30",
+        "13:40",
+        "13:50",
+        "14:00",
+        "14:10",
+        "14:20",
+        "14:30",
+        "14:40",
+        "14:50",
+        "15:00",
+        "15:10",
+        "15:20",
+        "15:30",
+        "15:40",
+        "15:50",
+        "16:00",
+        "16:10",
+        "16:20",
+        "16:30",
+        "16:40",
+        "16:50",
+        "17:00",
+        "17:10",
+        "17:20",
+        "17:30",
+        "17:40",
+        "17:50",
+        "18:00",
+        "18:10",
+        "18:20",
+        "18:30",
+        "18:40",
+        "18:50",
+        "19:00",
+        "19:10",
+        "19:20",
+        "19:30",
+        "19:40",
+        "19:50",
+        "20:00",
+        "20:10",
+        "20:20",
+        "20:30",
+        "20:40",
+        "20:50",
+        "21:00",
+        "21:10",
+        "21:20",
+        "21:24",
+        "21:30",
+        "21:40",
+        "21:50",
+        "22:00",
+        "22:10",
+        "22:20",
+        "22:30",
+        "22:40",
+        "22:50",
+        "23:00",
+        "23:06",
+        "23:10",
+        "23:12",
+        "23:20",
+        "23:30"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "воркеры",
+            "en": "workers"
+          },
+          "values": [
+            2400,
+            2408,
+            2417,
+            2425,
+            2433,
+            2442,
+            2450,
+            2458,
+            2467,
+            2475,
+            2483,
+            2492,
+            2500,
+            2508,
+            2517,
+            2525,
+            2533,
+            2542,
+            2550,
+            2558,
+            2567,
+            2575,
+            2583,
+            2592,
+            2600,
+            2608,
+            2617,
+            2625,
+            2633,
+            2642,
+            2650,
+            2658,
+            2667,
+            2675,
+            2683,
+            2692,
+            2700,
+            2712,
+            2725,
+            2738,
+            2750,
+            2762,
+            2775,
+            2788,
+            2800,
+            2750,
+            2638,
+            2525,
+            2412,
+            2300,
+            2200,
+            2100,
+            2000,
+            1900,
+            1800,
+            1800,
+            3100,
+            3120,
+            3150,
+            3155,
+            3160,
+            3166,
+            3171,
+            3176,
+            3181,
+            3186,
+            3192,
+            3197,
+            3200,
+            2800,
+            2600,
+            2400,
+            2400
+          ]
+        },
+        {
+          "name": {
+            "ru": "API-ноды",
+            "en": "API nodes"
+          },
+          "values": [
+            800,
+            800,
+            800,
+            800,
+            800,
+            800,
+            800,
+            800,
+            800,
+            800,
+            800,
+            800,
+            800,
+            804,
+            808,
+            812,
+            817,
+            821,
+            825,
+            829,
+            833,
+            838,
+            842,
+            846,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            850,
+            800,
+            775,
+            750,
+            725,
+            700,
+            680,
+            660,
+            640,
+            620,
+            600,
+            600,
+            1100,
+            1100,
+            1100,
+            1100,
+            1100,
+            1100,
+            1100,
+            1100,
+            1100,
+            1100,
+            1100,
+            1100,
+            1100,
+            967,
+            900,
+            800,
+            800
+          ]
+        },
+        {
+          "name": {
+            "ru": "внутренний endpoint",
+            "en": "internal endpoint"
+          },
+          "values": [
+            200,
+            258,
+            317,
+            375,
+            433,
+            492,
+            550,
+            608,
+            667,
+            725,
+            783,
+            842,
+            900,
+            1004,
+            1108,
+            1212,
+            1317,
+            1421,
+            1525,
+            1629,
+            1733,
+            1838,
+            1942,
+            2046,
+            2150,
+            2308,
+            2467,
+            2625,
+            2783,
+            2942,
+            3100,
+            3258,
+            3417,
+            3575,
+            3733,
+            3892,
+            4050,
+            4325,
+            4600,
+            4875,
+            5150,
+            5425,
+            5700,
+            5975,
+            6250,
+            6450,
+            6588,
+            6725,
+            6862,
+            7000,
+            7120,
+            7240,
+            7360,
+            7480,
+            7600,
+            7600,
+            8200,
+            8260,
+            8350,
+            8418,
+            8485,
+            8553,
+            8621,
+            8689,
+            8756,
+            8824,
+            8892,
+            8959,
+            9000,
+            5667,
+            4000,
+            300,
+            300
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрирует «An internal service endpoint leaked Redis connections under heavy load» и «blocking new connections from workers and API nodes». Сумма групп совпадает с графиком `connected_clients`. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustrates “An internal service endpoint leaked Redis connections under heavy load” and “blocking new connections from workers and API nodes”. The groups sum to the `connected_clients` chart. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "21:24",
+          "label": {
+            "ru": "стабильно",
+            "en": "stable"
+          }
+        },
+        {
+          "x": "23:06",
+          "label": {
+            "ru": "патч",
+            "en": "patch"
+          }
+        }
+      ]
+    },
+    "errors": {
+      "title": {
+        "ru": "Отказы подключения к Redis",
+        "en": "Redis connection refusals"
+      },
+      "unit": {
+        "ru": "в минуту",
+        "en": "per minute"
+      },
+      "x": [
+        "12:00",
+        "12:10",
+        "12:20",
+        "12:30",
+        "12:40",
+        "12:50",
+        "13:00",
+        "13:10",
+        "13:20",
+        "13:30",
+        "13:40",
+        "13:50",
+        "14:00",
+        "14:10",
+        "14:20",
+        "14:30",
+        "14:40",
+        "14:50",
+        "15:00",
+        "15:10",
+        "15:20",
+        "15:30",
+        "15:40",
+        "15:50",
+        "16:00",
+        "16:10",
+        "16:20",
+        "16:30",
+        "16:40",
+        "16:50",
+        "17:00",
+        "17:10",
+        "17:20",
+        "17:30",
+        "17:40",
+        "17:50",
+        "18:00",
+        "18:10",
+        "18:20",
+        "18:30",
+        "18:40",
+        "18:50",
+        "19:00",
+        "19:10",
+        "19:20",
+        "19:30",
+        "19:40",
+        "19:50",
+        "20:00",
+        "20:10",
+        "20:20",
+        "20:30",
+        "20:40",
+        "20:50",
+        "21:00",
+        "21:10",
+        "21:20",
+        "21:24",
+        "21:30",
+        "21:40",
+        "21:50",
+        "22:00",
+        "22:10",
+        "22:20",
+        "22:30",
+        "22:40",
+        "22:50",
+        "23:00",
+        "23:06",
+        "23:10",
+        "23:12",
+        "23:20",
+        "23:30"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "воркеры",
+            "en": "workers"
+          },
+          "values": [
+            6,
+            12,
+            15,
+            22,
+            12,
+            21,
+            0,
+            0,
+            22,
+            7,
+            20,
+            0,
+            0,
+            0,
+            2,
+            4,
+            0,
+            0,
+            0,
+            21,
+            13,
+            0,
+            15,
+            0,
+            6,
+            0,
+            0,
+            19,
+            0,
+            0,
+            24,
+            19,
+            0,
+            23,
+            2,
+            9,
+            0,
+            22,
+            10,
+            23,
+            20,
+            0,
+            0,
+            0,
+            12,
+            478,
+            790,
+            1105,
+            1125,
+            1209,
+            1242,
+            1290,
+            1349,
+            1366,
+            1391,
+            399,
+            30,
+            0,
+            29,
+            0,
+            18,
+            23,
+            0,
+            21,
+            0,
+            11,
+            0,
+            0,
+            0,
+            25,
+            0,
+            13,
+            21
+          ]
+        },
+        {
+          "name": {
+            "ru": "API-ноды",
+            "en": "API nodes"
+          },
+          "values": [
+            7,
+            8,
+            0,
+            0,
+            0,
+            4,
+            0,
+            6,
+            0,
+            6,
+            0,
+            7,
+            6,
+            0,
+            1,
+            4,
+            0,
+            1,
+            7,
+            0,
+            7,
+            4,
+            8,
+            0,
+            0,
+            7,
+            7,
+            0,
+            0,
+            0,
+            3,
+            0,
+            11,
+            2,
+            0,
+            4,
+            0,
+            10,
+            10,
+            0,
+            3,
+            5,
+            7,
+            11,
+            0,
+            177,
+            302,
+            415,
+            436,
+            439,
+            472,
+            478,
+            482,
+            510,
+            515,
+            143,
+            8,
+            0,
+            0,
+            11,
+            7,
+            0,
+            9,
+            0,
+            0,
+            12,
+            6,
+            0,
+            0,
+            0,
+            0,
+            12,
+            0
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрирует «`ECONNREFUSED` / `max clients reached` errors on affected servers». Спад около 21:10 — после временного подъёма лимита. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustrates “`ECONNREFUSED` / `max clients reached` errors on affected servers”. The drop around 21:10 follows the temporary limit raise. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "21:24",
+          "label": {
+            "ru": "стабильно",
+            "en": "stable"
+          }
+        },
+        {
+          "x": "23:06",
+          "label": {
+            "ru": "патч",
+            "en": "patch"
+          }
+        }
+      ]
+    },
+    "leak": {
+      "title": {
+        "ru": "Внутренний endpoint: ошибки и рост соединений",
+        "en": "Internal endpoint: errors and connection growth"
+      },
+      "unit": {
+        "ru": "в минуту",
+        "en": "per minute"
+      },
+      "x": [
+        "12:00",
+        "12:10",
+        "12:20",
+        "12:30",
+        "12:40",
+        "12:50",
+        "13:00",
+        "13:10",
+        "13:20",
+        "13:30",
+        "13:40",
+        "13:50",
+        "14:00",
+        "14:10",
+        "14:20",
+        "14:30",
+        "14:40",
+        "14:50",
+        "15:00",
+        "15:10",
+        "15:20",
+        "15:30",
+        "15:40",
+        "15:50",
+        "16:00",
+        "16:10",
+        "16:20",
+        "16:30",
+        "16:40",
+        "16:50",
+        "17:00",
+        "17:10",
+        "17:20",
+        "17:30",
+        "17:40",
+        "17:50",
+        "18:00",
+        "18:10",
+        "18:20",
+        "18:30",
+        "18:40",
+        "18:50",
+        "19:00",
+        "19:10",
+        "19:20",
+        "19:30",
+        "19:40",
+        "19:50",
+        "20:00",
+        "20:10",
+        "20:20",
+        "20:30",
+        "20:40",
+        "20:50",
+        "21:00",
+        "21:10",
+        "21:20",
+        "21:30"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "запросы с ошибкой",
+            "en": "failed requests"
+          },
+          "values": [
+            1,
+            1,
+            3,
+            0,
+            2,
+            1,
+            0,
+            40,
+            0,
+            2,
+            0,
+            0,
+            2,
+            3,
+            0,
+            79,
+            3,
+            4,
+            2,
+            2,
+            4,
+            0,
+            3,
+            1,
+            59,
+            0,
+            1,
+            3,
+            1,
+            2,
+            3,
+            1,
+            100,
+            0,
+            0,
+            1,
+            3,
+            2,
+            1,
+            2,
+            130,
+            1,
+            3,
+            171,
+            1,
+            40,
+            40,
+            42,
+            41,
+            39,
+            42,
+            38,
+            40,
+            41,
+            39,
+            40,
+            38,
+            41
+          ]
+        },
+        {
+          "name": {
+            "ru": "новые незакрытые соединения",
+            "en": "new unreleased connections"
+          },
+          "values": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            35,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            71,
+            1,
+            2,
+            0,
+            0,
+            2,
+            0,
+            1,
+            0,
+            52,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            90,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            118,
+            0,
+            1,
+            155,
+            0,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрирует «did not reliably close Redis connections under certain error conditions» и «increasing connection churn and exposing the leak». После 19:30 лимит выбран, новым соединениям Redis отказывает, поэтому рост почти нулевой. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustrates “did not reliably close Redis connections under certain error conditions” and “increasing connection churn and exposing the leak”. After 19:30 the limit is hit and Redis refuses new connections, so growth is near zero. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      }
+    },
+    "rps": {
+      "title": {
+        "ru": "Endpoint: запросы в минуту",
+        "en": "Endpoint: requests per minute"
+      },
+      "unit": {
+        "ru": "в минуту",
+        "en": "per minute"
+      },
+      "x": [
+        "12:00",
+        "12:10",
+        "12:20",
+        "12:30",
+        "12:40",
+        "12:50",
+        "13:00",
+        "13:10",
+        "13:20",
+        "13:30",
+        "13:40",
+        "13:50",
+        "14:00",
+        "14:10",
+        "14:20",
+        "14:30",
+        "14:40",
+        "14:50",
+        "15:00",
+        "15:10",
+        "15:20",
+        "15:30",
+        "15:40",
+        "15:50",
+        "16:00",
+        "16:10",
+        "16:20",
+        "16:30",
+        "16:40",
+        "16:50",
+        "17:00",
+        "17:10",
+        "17:20",
+        "17:30",
+        "17:40",
+        "17:50",
+        "18:00",
+        "18:10",
+        "18:20",
+        "18:30",
+        "18:40",
+        "18:50",
+        "19:00",
+        "19:10",
+        "19:20",
+        "19:30",
+        "19:40",
+        "19:50",
+        "20:00",
+        "20:10"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "к endpoint",
+            "en": "to the endpoint"
+          },
+          "values": [
+            404,
+            449,
+            399,
+            435,
+            398,
+            409,
+            455,
+            408,
+            435,
+            425,
+            425,
+            429,
+            411,
+            450,
+            407,
+            416,
+            404,
+            420,
+            429,
+            460,
+            429,
+            414,
+            423,
+            468,
+            413,
+            448,
+            434,
+            452,
+            433,
+            455,
+            444,
+            454,
+            470,
+            452,
+            426,
+            422,
+            476,
+            450,
+            433,
+            479,
+            457,
+            467,
+            477,
+            442,
+            447,
+            479,
+            436,
+            474,
+            435,
+            471
+          ]
+        },
+        {
+          "name": {
+            "ru": "в резервную очередь",
+            "en": "to the backup queue"
+          },
+          "values": [
+            0,
+            0,
+            0,
+            7,
+            0,
+            0,
+            8,
+            0,
+            1,
+            2,
+            0,
+            0,
+            4,
+            0,
+            5,
+            0,
+            0,
+            0,
+            0,
+            8,
+            2,
+            5,
+            0,
+            5,
+            0,
+            0,
+            3,
+            5,
+            0,
+            0,
+            0,
+            0,
+            0,
+            6,
+            0,
+            8,
+            8,
+            0,
+            0,
+            0,
+            0,
+            0,
+            8,
+            0,
+            1902,
+            892,
+            402,
+            283,
+            144,
+            140
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрирует «A traffic shaper moved the burst into a backup queue»: запросов к endpoint не прибавилось, всплеск ушёл в резервную очередь. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustrates “A traffic shaper moved the burst into a backup queue”: the endpoint gets no more requests, the burst went into the backup queue. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      }
+    },
+    "rps_bad": {
+      "title": {
+        "ru": "Endpoint: запросы в минуту",
+        "en": "Endpoint: requests per minute"
+      },
+      "unit": {
+        "ru": "в минуту",
+        "en": "per minute"
+      },
+      "x": [
+        "12:00",
+        "12:10",
+        "12:20",
+        "12:30",
+        "12:40",
+        "12:50",
+        "13:00",
+        "13:10",
+        "13:20",
+        "13:30",
+        "13:40",
+        "13:50",
+        "14:00",
+        "14:10",
+        "14:20",
+        "14:30",
+        "14:40",
+        "14:50",
+        "15:00",
+        "15:10",
+        "15:20",
+        "15:30",
+        "15:40",
+        "15:50",
+        "16:00",
+        "16:10",
+        "16:20",
+        "16:30",
+        "16:40",
+        "16:50",
+        "17:00",
+        "17:10",
+        "17:20",
+        "17:30",
+        "17:40",
+        "17:50",
+        "18:00",
+        "18:10",
+        "18:20",
+        "18:30",
+        "18:40",
+        "18:50",
+        "19:00",
+        "19:10",
+        "19:20",
+        "19:30",
+        "19:40",
+        "19:50",
+        "20:00",
+        "20:10"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "к endpoint",
+            "en": "to the endpoint"
+          },
+          "values": [
+            448,
+            392,
+            436,
+            402,
+            453,
+            396,
+            449,
+            438,
+            449,
+            459,
+            414,
+            421,
+            444,
+            420,
+            420,
+            419,
+            457,
+            459,
+            456,
+            422,
+            465,
+            442,
+            426,
+            440,
+            439,
+            420,
+            450,
+            439,
+            452,
+            475,
+            459,
+            507,
+            597,
+            667,
+            699,
+            789,
+            796,
+            866,
+            930,
+            1039,
+            1086,
+            1151,
+            1187,
+            1628,
+            2080,
+            2462,
+            2891,
+            3316,
+            3770,
+            4220
+          ]
+        },
+        {
+          "name": {
+            "ru": "в резервную очередь",
+            "en": "to the backup queue"
+          },
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: так выглядел бы рост трафика к endpoint. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: this is what traffic growth on the endpoint would look like. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      }
+    },
+    "mem": {
+      "title": {
+        "ru": "Redis: память в процентах от `maxmemory`",
+        "en": "Redis: memory as a percent of `maxmemory`"
+      },
+      "unit": "%",
+      "x": [
+        "19:40",
+        "19:45",
+        "19:50",
+        "19:55",
+        "20:00",
+        "20:05",
+        "20:10",
+        "20:15",
+        "20:20",
+        "20:25",
+        "20:30",
+        "20:35",
+        "20:40"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "used_memory",
+            "en": "used_memory"
+          },
+          "values": [
+            33,
+            33,
+            33,
+            33,
+            34,
+            34,
+            34,
+            33,
+            34,
+            34,
+            34,
+            36,
+            36
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что показала бы память Redis, если бы дело было в ней. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: what Redis memory would show if memory were the problem. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "yMax": 100
+    },
+    "mem_bad": {
+      "title": {
+        "ru": "Redis: память в процентах от `maxmemory`",
+        "en": "Redis: memory as a percent of `maxmemory`"
+      },
+      "unit": "%",
+      "x": [
+        "19:40",
+        "19:45",
+        "19:50",
+        "19:55",
+        "20:00",
+        "20:05",
+        "20:10",
+        "20:15",
+        "20:20",
+        "20:25",
+        "20:30",
+        "20:35",
+        "20:40"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "used_memory",
+            "en": "used_memory"
+          },
+          "values": [
+            90,
+            92,
+            94,
+            94,
+            96,
+            97,
+            96,
+            97,
+            98,
+            98,
+            97,
+            98,
+            98
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: так выглядела бы нехватка памяти Redis. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: this is what Redis running out of memory would look like. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "yMax": 100
+    },
+    "latency": {
+      "title": {
+        "ru": "Redis: задержка команд",
+        "en": "Redis: command latency"
+      },
+      "unit": "ms",
+      "x": [
+        "19:40",
+        "19:45",
+        "19:50",
+        "19:55",
+        "20:00",
+        "20:05",
+        "20:10",
+        "20:15",
+        "20:20",
+        "20:25",
+        "20:30",
+        "20:35",
+        "20:40"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "p99",
+            "en": "p99"
+          },
+          "values": [
+            1.1,
+            1.0,
+            1.2,
+            1.1,
+            1.0,
+            1.1,
+            1.2,
+            1.0,
+            1.1,
+            1.0,
+            1.1,
+            1.2,
+            1.1
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: что показала бы задержка команд, если бы Redis тормозил из-за медленных команд. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: what command latency would show if Redis were slowed by slow commands. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "yMax": 60
+    },
+    "latency_bad": {
+      "title": {
+        "ru": "Redis: задержка команд",
+        "en": "Redis: command latency"
+      },
+      "unit": "ms",
+      "x": [
+        "19:40",
+        "19:45",
+        "19:50",
+        "19:55",
+        "20:00",
+        "20:05",
+        "20:10",
+        "20:15",
+        "20:20",
+        "20:25",
+        "20:30",
+        "20:35",
+        "20:40"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "p99",
+            "en": "p99"
+          },
+          "values": [
+            6,
+            15,
+            23,
+            26,
+            32,
+            39,
+            44,
+            48,
+            49,
+            50,
+            52,
+            54,
+            54
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: так выглядели бы медленные команды. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: this is what slow commands would look like. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "yMax": 60
+    },
+    "cpu": {
+      "title": {
+        "ru": "Машины воркеров: CPU",
+        "en": "Worker machines: CPU"
+      },
+      "unit": "%",
+      "x": [
+        "19:40",
+        "19:45",
+        "19:50",
+        "19:55",
+        "20:00",
+        "20:05",
+        "20:10",
+        "20:15",
+        "20:20",
+        "20:25",
+        "20:30",
+        "20:35",
+        "20:40"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "среднее",
+            "en": "average"
+          },
+          "values": [
+            30,
+            32,
+            32,
+            34,
+            30,
+            30,
+            30,
+            31,
+            34,
+            30,
+            33,
+            31,
+            32
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: воркеры ждут соединения и простаивают. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: the workers wait for connections and sit idle. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "yMax": 100
+    },
+    "cpu_bad": {
+      "title": {
+        "ru": "Машины воркеров: CPU",
+        "en": "Worker machines: CPU"
+      },
+      "unit": "%",
+      "x": [
+        "19:40",
+        "19:45",
+        "19:50",
+        "19:55",
+        "20:00",
+        "20:05",
+        "20:10",
+        "20:15",
+        "20:20",
+        "20:25",
+        "20:30",
+        "20:35",
+        "20:40"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "среднее",
+            "en": "average"
+          },
+          "values": [
+            86,
+            89,
+            90,
+            92,
+            90,
+            90,
+            93,
+            93,
+            93,
+            95,
+            94,
+            96,
+            94
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: так выглядела бы нехватка CPU. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: this is what a CPU shortage would look like. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "yMax": 100
+    },
+    "w_scale": {
+      "title": {
+        "ru": "Воркеры кодирования: запущено и подключено к Redis",
+        "en": "Encoding workers: running and connected to Redis"
+      },
+      "unit": {
+        "ru": "воркеры",
+        "en": "workers"
+      },
+      "x": [
+        "19:40",
+        "19:45",
+        "19:50",
+        "19:54",
+        "19:55",
+        "20:00",
+        "20:05",
+        "20:10",
+        "20:15",
+        "20:20",
+        "20:25",
+        "20:30",
+        "20:35",
+        "20:40"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "запущено",
+            "en": "running"
+          },
+          "values": [
+            40,
+            40,
+            40,
+            40,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80,
+            80
+          ]
+        },
+        {
+          "name": {
+            "ru": "подключено",
+            "en": "connected"
+          },
+          "values": [
+            38,
+            38,
+            37,
+            37,
+            37,
+            36,
+            35,
+            34,
+            33,
+            32,
+            31,
+            31,
+            30,
+            30
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: новые воркеры не могут получить соединение с Redis. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: the new workers cannot get a connection to Redis. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "19:55",
+          "label": {
+            "ru": "+40 воркеров",
+            "en": "+40 workers"
+          }
+        }
+      ]
+    },
+    "w_restart": {
+      "title": {
+        "ru": "Assemblies: время в очереди",
+        "en": "Assemblies: queue time"
+      },
+      "unit": {
+        "ru": "мин",
+        "en": "min"
+      },
+      "x": [
+        "19:40",
+        "19:45",
+        "19:50",
+        "19:55",
+        "19:56",
+        "20:00",
+        "20:05",
+        "20:10",
+        "20:15",
+        "20:20",
+        "20:25",
+        "20:30"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "p95",
+            "en": "p95"
+          },
+          "values": [
+            20,
+            21,
+            22,
+            23,
+            23,
+            14,
+            16,
+            22,
+            26,
+            29,
+            32,
+            34
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: после рестарта воркеры переподключаются и снова занимают освободившиеся слоты. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: after the restart the workers reconnect and take the freed slots again. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "19:56",
+          "label": {
+            "ru": "рестарт воркеров",
+            "en": "workers restarted"
+          }
+        }
+      ]
+    },
+    "redis_restart": {
+      "title": {
+        "ru": "Redis: подключённые клиенты",
+        "en": "Redis: connected clients"
+      },
+      "unit": {
+        "ru": "клиенты",
+        "en": "clients"
+      },
+      "x": [
+        "20:44",
+        "20:45",
+        "20:46",
+        "20:47",
+        "20:48",
+        "20:49",
+        "20:50",
+        "20:51",
+        "20:52",
+        "20:53",
+        "20:54",
+        "20:55",
+        "20:56",
+        "20:57",
+        "20:58",
+        "20:59",
+        "21:00"
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "series": [
+        {
+          "name": {
+            "ru": "connected_clients",
+            "en": "connected_clients"
+          },
+          "values": [
+            10000,
+            10000,
+            10000,
+            0,
+            1800,
+            3900,
+            6100,
+            8200,
+            9600,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000
+          ]
+        },
+        {
+          "name": {
+            "ru": "maxclients",
+            "en": "maxclients"
+          },
+          "values": [
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000
+          ],
+          "threshold": true
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: после рестарта все клиенты переподключаются и снова занимают лимит. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: after the restart all clients reconnect and fill the limit again. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "20:47",
+          "label": {
+            "ru": "рестарт Redis",
+            "en": "Redis restart"
+          }
+        }
+      ]
+    },
+    "migrate": {
+      "title": {
+        "ru": "Очереди: обработано задач в минуту",
+        "en": "Queues: jobs processed per minute"
+      },
+      "unit": {
+        "ru": "в минуту",
+        "en": "per minute"
+      },
+      "x": [
+        "20:40",
+        "20:45",
+        "20:50",
+        "20:55",
+        "21:00",
+        "21:05",
+        "21:10",
+        "21:15",
+        "21:20",
+        "21:25",
+        "21:30"
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "series": [
+        {
+          "name": {
+            "ru": "задач",
+            "en": "jobs"
+          },
+          "values": [
+            310,
+            305,
+            300,
+            0,
+            0,
+            0,
+            0,
+            80,
+            120,
+            150,
+            190
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: пока очереди переносят, обработка стоит. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: while the queues are being moved, processing stops. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "20:55",
+          "label": {
+            "ru": "перенос очередей",
+            "en": "queue migration"
+          }
+        }
+      ]
+    },
+    "rollback": {
+      "title": {
+        "ru": "Redis: подключённые клиенты",
+        "en": "Redis: connected clients"
+      },
+      "unit": {
+        "ru": "клиенты",
+        "en": "clients"
+      },
+      "x": [
+        "20:44",
+        "20:45",
+        "20:46",
+        "20:47",
+        "20:48",
+        "20:49",
+        "20:50",
+        "20:51",
+        "20:52",
+        "20:53",
+        "20:54",
+        "20:55",
+        "20:56",
+        "20:57",
+        "20:58",
+        "20:59",
+        "21:00",
+        "21:01",
+        "21:02",
+        "21:03",
+        "21:04",
+        "21:05",
+        "21:06",
+        "21:07",
+        "21:08",
+        "21:09",
+        "21:10"
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "series": [
+        {
+          "name": {
+            "ru": "connected_clients",
+            "en": "connected_clients"
+          },
+          "values": [
+            10000,
+            10000,
+            10000,
+            3500,
+            4100,
+            4800,
+            5500,
+            6300,
+            7100,
+            7900,
+            8600,
+            9200,
+            9700,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000
+          ]
+        },
+        {
+          "name": {
+            "ru": "maxclients",
+            "en": "maxclients"
+          },
+          "values": [
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000,
+            10000
+          ],
+          "threshold": true
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: при откате процессы перезапускаются и соединения сбрасываются, но код с утечкой остаётся, и клиенты возвращаются к лимиту. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: a rollback restarts the processes and drops the connections, but the leaky code stays, and the clients climb back to the limit. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "20:47",
+          "label": {
+            "ru": "откат релиза",
+            "en": "release rolled back"
+          }
+        }
+      ]
+    },
+    "block": {
+      "title": {
+        "ru": "Redis: подключённые клиенты",
+        "en": "Redis: connected clients"
+      },
+      "unit": {
+        "ru": "клиенты",
+        "en": "clients"
+      },
+      "x": [
+        "21:30",
+        "21:35",
+        "21:40",
+        "21:45",
+        "21:50",
+        "21:55",
+        "22:00",
+        "22:05",
+        "22:10",
+        "22:15",
+        "22:20",
+        "22:25",
+        "22:30"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "connected_clients",
+            "en": "connected_clients"
+          },
+          "values": [
+            12500,
+            12540,
+            12580,
+            12620,
+            12660,
+            12700,
+            12740,
+            12780,
+            12820,
+            12860,
+            12900,
+            12940,
+            12980
+          ]
+        },
+        {
+          "name": {
+            "ru": "maxclients",
+            "en": "maxclients"
+          },
+          "values": [
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000
+          ],
+          "threshold": true
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: блокировка клиента не закрывает уже утёкшие соединения. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: blocking the customer does not close connections that already leaked. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "21:35",
+          "label": {
+            "ru": "клиент заблокирован",
+            "en": "customer blocked"
+          }
+        }
+      ]
+    },
+    "pool": {
+      "title": {
+        "ru": "Redis: соединения воркеров и endpoint",
+        "en": "Redis: worker and endpoint connections"
+      },
+      "unit": {
+        "ru": "клиенты",
+        "en": "clients"
+      },
+      "x": [
+        "21:30",
+        "21:35",
+        "21:40",
+        "21:45",
+        "21:50",
+        "21:55",
+        "22:00",
+        "22:05",
+        "22:10",
+        "22:15",
+        "22:20",
+        "22:25",
+        "22:30"
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "series": [
+        {
+          "name": {
+            "ru": "воркеры",
+            "en": "workers"
+          },
+          "values": [
+            3100,
+            3100,
+            1600,
+            1600,
+            1600,
+            1600,
+            1600,
+            1600,
+            1600,
+            1600,
+            1600,
+            1600,
+            1600
+          ]
+        },
+        {
+          "name": {
+            "ru": "внутренний endpoint",
+            "en": "internal endpoint"
+          },
+          "values": [
+            8250,
+            8290,
+            8330,
+            8370,
+            8410,
+            8450,
+            8490,
+            8530,
+            8570,
+            8610,
+            8650,
+            8690,
+            8730
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: у воркеров стало вдвое меньше соединений, а endpoint копит теми же темпами. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: workers have half the connections, while the endpoint keeps accumulating at the same pace. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "21:40",
+          "label": {
+            "ru": "пул воркеров вдвое меньше",
+            "en": "worker pool halved"
+          }
+        }
+      ]
+    },
+    "recycle": {
+      "title": {
+        "ru": "Redis: подключённые клиенты",
+        "en": "Redis: connected clients"
+      },
+      "unit": {
+        "ru": "клиенты",
+        "en": "clients"
+      },
+      "x": [
+        "23:00",
+        "23:05",
+        "23:10",
+        "23:15",
+        "23:20",
+        "23:25",
+        "23:30",
+        "23:35",
+        "23:40",
+        "23:45",
+        "23:50",
+        "23:55",
+        "00:00"
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "series": [
+        {
+          "name": {
+            "ru": "connected_clients",
+            "en": "connected_clients"
+          },
+          "values": [
+            13250,
+            13280,
+            13300,
+            3600,
+            4200,
+            4800,
+            5400,
+            6000,
+            6600,
+            7200,
+            7800,
+            8400,
+            9000
+          ]
+        },
+        {
+          "name": {
+            "ru": "maxclients",
+            "en": "maxclients"
+          },
+          "values": [
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000,
+            14000
+          ],
+          "threshold": true
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: после перезапуска код тот же, и утечка набирает соединения заново. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: after the restart the code is the same, and the leak accumulates connections again. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "23:15",
+          "label": {
+            "ru": "перезапуск процессов",
+            "en": "processes restarted"
+          }
+        }
+      ]
+    },
+    "raise_more": {
+      "title": {
+        "ru": "Redis: подключённые клиенты",
+        "en": "Redis: connected clients"
+      },
+      "unit": {
+        "ru": "клиенты",
+        "en": "clients"
+      },
+      "x": [
+        "22:30",
+        "23:00",
+        "23:30",
+        "00:00",
+        "00:30",
+        "01:00",
+        "01:30",
+        "02:00",
+        "02:30",
+        "03:00",
+        "03:30",
+        "04:00",
+        "04:30",
+        "05:00",
+        "05:30",
+        "06:00",
+        "06:30"
+      ],
+      "illustrative": true,
+      "series": [
+        {
+          "name": {
+            "ru": "connected_clients",
+            "en": "connected_clients"
+          },
+          "values": [
+            13300,
+            13960,
+            14620,
+            15280,
+            15940,
+            16600,
+            17260,
+            17920,
+            18580,
+            19240,
+            19900,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000
+          ]
+        },
+        {
+          "name": {
+            "ru": "maxclients",
+            "en": "maxclients"
+          },
+          "values": [
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000,
+            20000
+          ],
+          "threshold": true
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: лимит выше, но соединения растут тем же темпом и упираются в новый потолок. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: the limit is higher, but connections grow at the same pace and hit the new ceiling. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "22:30",
+          "label": {
+            "ru": "лимит 20000",
+            "en": "limit 20000"
+          }
+        }
+      ]
+    },
+    "ratelimit": {
+      "title": {
+        "ru": "Внутренний endpoint: новые незакрытые соединения",
+        "en": "Internal endpoint: new unreleased connections"
+      },
+      "unit": {
+        "ru": "в минуту",
+        "en": "per minute"
+      },
+      "x": [
+        "22:30",
+        "22:35",
+        "22:40",
+        "22:45",
+        "22:50",
+        "22:55",
+        "23:00",
+        "23:05",
+        "23:10",
+        "23:15",
+        "23:20",
+        "23:25",
+        "23:30"
+      ],
+      "illustrative": true,
+      "interpolation": "step",
+      "series": [
+        {
+          "name": {
+            "ru": "в минуту",
+            "en": "per minute"
+          },
+          "values": [
+            40,
+            40,
+            38,
+            8,
+            8,
+            9,
+            8,
+            8,
+            9,
+            8,
+            8,
+            8,
+            8
+          ]
+        }
+      ],
+      "note": {
+        "ru": "Иллюстрация: лимит на запросы замедляет утечку, но не останавливает. Числа придуманы. Так могло бы быть, в разборе этого нет.",
+        "en": "Illustration: the rate limit slows the leak but does not stop it. Numbers are made up. This is what it could look like; the postmortem has no such chart."
+      },
+      "marks": [
+        {
+          "x": "22:45",
+          "label": {
+            "ru": "лимит на запросы",
+            "en": "rate limit"
+          }
+        }
+      ],
+      "yMax": 100
+    }
+  }
+}
+  </script>
+  <script src="../player.js"></script>
+</body>
+</html>
