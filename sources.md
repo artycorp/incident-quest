@@ -20,6 +20,7 @@ Ordered simplest first: one mechanism, 1–3 components, a short postmortem.
 | 001 | AWS Kinesis, us-east-1, 2020-11-25 | https://aws.amazon.com/message/11201/ | OS thread limit after front-end fleet capacity increase, cascade to Cognito/CloudWatch |
 | 002 | Stack Exchange, 2016-07-20 | http://web.archive.org/web/20160720200842/https://stackstatus.net/post/147710624694/outage-postmortem-july-20-2016 | One post makes a regex burn CPU on every home page view; the LB health check hits the home page and pulls all web servers |
 | 004 | Buildkite, 2016-08-22 | https://buildkite.com/blog/outage-post-mortem-for-august-22nd | Database instance downgraded to cut AWS spend, not enough capacity at peak, dependent servers collapse |
+| 005 | Transloadit, 2025-09-03 | https://transloadit.com/blog/2025/09/us-east-redis-connection-exhaustion-post-mortem/ | Internal endpoint leaks Redis connections on the error path; shared Redis hits its client limit and starves workers and API nodes |
 | todo | GitHub, 2026-02-09 | https://github.blog/news-insights/company-news/addressing-githubs-recent-availability-issues-2/ | Client apps grow reads 10×, a cache TTL cut from 12h to 2h adds writes; Monday peak overloads the auth database |
 | todo | Discord, 2017-03-20 | https://status.discordapp.com/incidents/dj3l6lw926kl | Flapping presence service, thundering herd on reconnect, frontend queues fill up memory |
 | todo | Duo, 2018-08-20/29 | https://status.duo.com/incidents/4w07bmvnt359 | Request queue overloads insufficient database capacity, cascading latency and timeouts |

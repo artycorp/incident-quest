@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Что такое Transloadit</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <main>
+    <div class="bar"><a href="005.html?lang=ru">← К эпизоду</a><a class="lang" href="005.about.en.html">EN</a></div>
+    <h1>Что такое Transloadit</h1>
+    <p><a href="https://transloadit.com">Transloadit</a> — платформа обработки медиа для разработчиков (MPaaS, Media Processing as a Service): она кодирует видео, меняет размер изображений, принимает и отдаёт файлы. Компанию в 2009 году основали три инженера: Кевин ван Зонневелд, Тим Кошютцки и Феликс Гайзендорфер. Команда небольшая и распределённая по нескольким странам.</p>
+    <p>Для эпизода важно три вещи:</p>
+    <ul>
+      <li><b>Assemblies.</b> Задача на обработку называется Assembly: клиент запускает её через API, а воркеры берут её из очереди и выполняют.</li>
+      <li><b>Общий Redis.</b> Очереди, блокировки и метаданные региона лежат на общих серверах Redis. Это удобно, но если Redis недоступен, страдают все роли сразу.</li>
+      <li><b>Регионы.</b> Сервис работает в нескольких регионах AWS; авария коснулась us-east-1.</li>
+    </ul>
+  </main>
+</body>
+</html>
